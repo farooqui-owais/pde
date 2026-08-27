@@ -1,0 +1,23 @@
+.entry-body { max-width: 1000px; margin: 0 auto; }
+.entry-title { color: var(--green); font-size: 20px; border-bottom: 1px solid var(--hairline); padding-bottom: 12px; margin-bottom: 6px; }
+.entry-hint { color: var(--orange); font-size: 13px; margin-bottom: 20px; }
+.entry-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+.entry-modal {
+  background: #fff; border-radius: 8px; padding: 26px 30px; max-width: 480px; text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+.entry-modal p { color: var(--blue); font-weight: 600; font-size: 14px; margin-bottom: 18px; }
+.entry-modal .ledger-rule { margin-bottom: 16px; height: 3px; background: var(--hairline-strong); }
+
+.entry-grid { display: grid; grid-template-columns: 200px 1fr 220px 1fr; gap: 14px 20px; align-items: center; }
+.entry-grid label { font-weight: 700; font-size: 13.5px; text-align: right; }
+.entry-grid input, .entry-grid select { border: 1px solid var(--hairline-strong); border-radius: var(--radius); padding: 8px 10px; width: 100%; }
+.entry-grid .span2 { grid-column: span 3; }
+.entry-hint-inline { font-size: 12px; color: #666; }
+
+.entry-notice-red { color: var(--red); font-size: 13px; font-weight: 600; text-align: right; margin: 18px 0; }
+.entry-actions { display: flex; justify-content: flex-start; gap: 14px; margin-top: 10px; }
+.stamp-box { margin-top: 6px; padding: 12px 14px; background: #f6f1e4; border: 1px dashed var(--hairline-strong); font-size: 13px; grid-column: span 3; }

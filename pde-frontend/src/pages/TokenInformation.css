@@ -1,0 +1,21 @@
+.tok-body { max-width: 1200px; margin: 0 auto; }
+.tok-topline { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; }
+.tok-back { color: var(--red); font-weight: 700; }
+.tok-title { text-align: center; color: var(--green); font-size: 22px; margin-bottom: 4px; }
+.tok-user { text-align: center; font-size: 13px; color: #555; border-bottom: 1px solid var(--hairline); padding-bottom: 14px; margin-bottom: 24px; }
+.tok-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+.tok-col-title { color: var(--green); font-size: 16px; margin-bottom: 14px; }
+.tok-show-btn { margin-bottom: 16px; }
+.tok-filter-hint { font-size: 12.5px; color: #555; margin-bottom: 10px; }
+.tok-form-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.tok-form-row label { width: 150px; font-weight: 600; font-size: 13px; }
+.tok-form-row input, .tok-form-row select { flex: 1; border: 1px solid var(--hairline-strong); border-radius: var(--radius); padding: 8px 10px; }
+.tok-filter-actions { display: flex; gap: 12px; margin-top: 4px; }
+.tok-new-actions { display: flex; gap: 14px; margin-top: 10px; }
+.tok-table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+.tok-table th { text-align: left; font-size: 11.5px; text-transform: uppercase; color: #666; padding: 6px 8px; border-bottom: 1px solid var(--hairline-strong); }
+.tok-table td { padding: 8px; border-bottom: 1px solid var(--hairline); font-size: 13px; }
+.status-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.status-open { background: #eaf6ea; color: var(--green); }
+.status-submitted { background: #e8f0fb; color: var(--blue); }
+.status-cancelled { background: #fdecea; color: var(--red); }

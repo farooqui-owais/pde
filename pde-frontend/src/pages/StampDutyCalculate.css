@@ -1,0 +1,19 @@
+.calc-body { max-width: 1200px; margin: 0 auto; }
+.calc-title { text-align: center; margin: 10px 0 20px; font-weight: 500; }
+.calc-tree { border: 1px solid var(--hairline-strong); background: #fff; max-height: 260px; overflow: auto; padding: 12px 16px; font-size: 13.5px; }
+.calc-tree ul { list-style: none; margin: 0; padding-left: 18px; }
+.calc-tree > ul { padding-left: 0; }
+.calc-tree li { padding: 3px 0; }
+.calc-node { color: #1565c0; cursor: pointer; }
+.calc-node:hover { text-decoration: underline; }
+.calc-node.leaf.selected { background: #cfe4fb; font-weight: 700; border-radius: 2px; padding: 1px 4px; }
+.calc-node.branch { color: #1565c0; font-weight: 600; }
+
+.calc-controls { margin-top: 22px; display: grid; grid-template-columns: 220px 200px; row-gap: 16px; align-items: center; }
+.calc-controls label { font-weight: 700; font-size: 13.5px; }
+.calc-controls select { border: 1px solid var(--hairline-strong); border-radius: var(--radius); padding: 7px 10px; }
+.calc-check { display: flex; align-items: center; gap: 8px; }
+
+.calc-results { margin-top: 22px; font-size: 14px; }
+.calc-results div { margin-bottom: 6px; }
+.calc-actions { display: flex; gap: 14px; margin-top: 22px; }

@@ -1,0 +1,14 @@
+.rent-body { max-width: 1000px; margin: 0 auto; }
+.rent-title { text-align: center; margin: 6px 0 26px; }
+.rent-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.rent-row label { width: 220px; font-weight: 700; font-size: 13.5px; }
+.rent-row input { border: 1px solid var(--hairline-strong); border-radius: var(--radius); padding: 8px 10px; width: 260px; }
+.rent-table { border-collapse: collapse; margin: 16px 0; }
+.rent-table th, .rent-table td { border: 1px solid #333; padding: 8px 12px; text-align: center; font-size: 13px; }
+.rent-table th { background: #fff; font-weight: 700; }
+.rent-table input { border: 1px solid var(--hairline-strong); border-radius: var(--radius); padding: 6px 8px; width: 140px; }
+.rent-increment { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-left: 16px; }
+.rent-radio-row { display: flex; align-items: center; gap: 24px; margin-bottom: 16px; }
+.rent-radio-row label { width: 220px; font-weight: 700; font-size: 13.5px; }
+.rent-radio-row span { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
+.rent-actions { display: flex; gap: 14px; margin-top: 20px; }

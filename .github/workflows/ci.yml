@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (compile + sanity)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pde-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Syntax check (no DB needed)
+        run: python -m compileall -q app
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pde-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install + build
+        run: |
+          npm ci
+          npm run build
+        env:
+          # Same-origin /api via nginx — matches aws/scripts/user-data.sh
+          VITE_API_BASE_URL: /
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: pde-frontend/dist

@@ -1,0 +1,19 @@
+.ht-header {
+  position: relative;
+  display: block;
+  width: 100%;
+  line-height: 0;
+  background: #fff;
+}
+.ht-header-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+.ht-lang-switcher {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  line-height: normal;
+}

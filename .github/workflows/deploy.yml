@@ -1,0 +1,50 @@
+name: Deploy
+
+# Deploys to the production EC2 on merge to `main` (or manual trigger).
+# See CICD.md for the full design and the OIDC role setup required.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to AWS EC2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1) Authenticate to AWS via OIDC — no long-lived access keys.
+      #    Replace <ACCOUNT_ID> with your AWS account id and pre-create the
+      #    `github-actions` role per CICD.md §6.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ap-south-1
+          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/github-actions
+
+      # 2) Trigger the on-box deploy via SSM Run Command (agent ships with AL2023).
+      #    The EC2 looks up the instance via the `Name=pde-app` tag.
+      - name: Trigger deploy on EC2 via SSM
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=pde-app" \
+            --query 'Reservations[0].Instances[0].InstanceId' --output text)
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "No instance tagged Name=pde-app found." >&2
+            exit 1
+          fi
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["/opt/pde/deploy-cd.sh"]' \
+            --timeout-seconds 600 \
+            --output text
+
+      # 3) Post-deploy health check (falls back to a direct localhost probe).
+      - name: Health check
+        run: |
+          curl --fail --retry 5 --retry-delay 20 \
+            https://<APP_DOMAIN>/api/health || \
+            curl --fail --retry 3 http://127.0.0.1:8000/api/health

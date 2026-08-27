@@ -1,0 +1,33 @@
+# =============================================================================
+# pde-api.service - systemd unit for the PDE (DakhalNama) FastAPI backend
+# -----------------------------------------------------------------------------
+# Mirrors the existing deploy/pde-api.service but runs Gunicorn with the
+# Uvicorn worker on 127.0.0.1:8000, behind Nginx.
+#
+# Written to /etc/systemd/system/pde-api.service by the EC2 user-data
+# bootstrap. Then:
+#     systemctl daemon-reload
+#     systemctl enable --now pde-api
+# =============================================================================
+
+[Unit]
+Description=PDE API (FastAPI / Gunicorn + Uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+
+# Where the backend code + .env live (matches AppDir).
+WorkingDirectory=/opt/pde/pde/pde-backend
+EnvironmentFile=/opt/pde/pde/pde-backend/.env
+
+# Bind to localhost only; Nginx is the only public entry point.
+ExecStart=/opt/pde/venv/bin/gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000
+
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

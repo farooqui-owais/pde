@@ -1,0 +1,15 @@
+.app-footer {
+  margin-top: auto;
+}
+
+/* Office strip (DIG / JDR / SRO) shown on the data-entry pages. */
+.entry-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 32px 0 40px;
+  padding: 14px 24px 0;
+  font-size: 12.5px;
+  color: #666;
+  border-top: 1px solid var(--hairline);
+}

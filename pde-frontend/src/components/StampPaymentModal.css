@@ -1,0 +1,21 @@
+.stamp-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 40px 20px; overflow-y: auto; z-index: 60;
+}
+.stamp-modal {
+  background: var(--page-bg); border-radius: 6px; width: 100%; max-width: 980px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3); overflow: hidden;
+}
+.stamp-modal-title { text-align: center; color: var(--green); font-size: 20px; padding: 18px 0 10px; }
+.stamp-modal-body { padding: 10px 30px 26px; }
+.stamp-grid { display: grid; grid-template-columns: 200px 1fr 260px 1fr; gap: 14px 20px; align-items: center; }
+.stamp-grid label { font-weight: 700; font-size: 13.5px; text-align: right; }
+.stamp-grid input, .stamp-grid select { border: 1px solid var(--hairline-strong); border-radius: var(--radius); padding: 8px 10px; width: 100%; }
+.stamp-multi-note { color: #1565c0; font-size: 13px; grid-column: span 2; }
+.stamp-modal-actions { display: flex; gap: 14px; margin-top: 22px; }
+.stamp-table-title { text-align: center; font-weight: 700; margin-top: 22px; }
+.stamp-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+.stamp-table th, .stamp-table td { border: 1px solid var(--hairline-strong); padding: 6px 8px; text-align: left; }
+.stamp-table th { background: #2b2b2b; color: #fff; font-weight: 600; }
+.stamp-table a { font-size: 12.5px; }

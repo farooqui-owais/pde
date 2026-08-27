@@ -1,0 +1,23 @@
+.fun-body { max-width: 1000px; margin: 0 auto; }
+.fun-panel { background: #fff; border: 1px solid var(--hairline); border-radius: 6px; padding: 20px 30px 30px; }
+.fun-back { color: var(--blue); font-size: 13px; }
+.fun-title { text-align: center; color: var(--green); font-size: 22px; margin: 6px 0 14px; }
+.fun-divider { height: 1px; background: var(--hairline-strong); margin: 14px 0; }
+.fun-hint { text-align: center; font-size: 12.5px; color: var(--orange); margin-bottom: 14px; }
+
+.fun-form-row { display: grid; grid-template-columns: 220px 1fr; gap: 14px; align-items: center; max-width: 560px; margin: 0 auto 16px; }
+.fun-form-row label { font-weight: 700; font-size: 13.5px; text-align: right; }
+.fun-form-row input, .fun-form-row select { border: 1px solid var(--hairline-strong); border-radius: var(--radius); padding: 8px 10px; }
+.fun-form-row .captcha-box { justify-self: end; }
+
+.fun-actions { display: flex; gap: 14px; justify-content: center; }
+
+.captcha-box { background: repeating-linear-gradient(45deg,#eee,#eee 4px,#e2e2e2 4px,#e2e2e2 8px); padding: 6px 14px; font-family: var(--font-mono); font-style: italic; letter-spacing: 3px; border: 1px solid var(--hairline-strong); white-space: nowrap; }
+.captcha-refresh {
+  flex: 0 0 auto;
+  width: 34px; height: 34px;
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius);
+  background: #fff; color: var(--green); font-size: 18px; line-height: 1;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.captcha-refresh:hover { background: #eaf6ea; border-color: var(--green); }
