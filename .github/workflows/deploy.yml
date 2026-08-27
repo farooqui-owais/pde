@@ -8,6 +8,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  id-token: write   # Required for GitHub to mint an OIDC token for AWS auth
+  contents: read
+
 jobs:
   deploy:
     name: Deploy to AWS EC2
@@ -22,7 +26,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ap-south-1
-          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/github-actions
+          role-to-assume: arn:aws:iam::967501764038:role/github-actions
 
       # 2) Trigger the on-box deploy via SSM Run Command (agent ships with AL2023).
       #    The EC2 looks up the instance via the `Name=pde-app` tag.
