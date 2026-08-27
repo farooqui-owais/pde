@@ -20,13 +20,13 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/pde}"
-REPO_URL="${REPO_URL:-https://github.com/your-org/pde.git}"
+REPO_URL="${REPO_URL:-https://github.com/farooqui-owais/pde.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 
 DB_HOST="${DB_HOST:-}"
 DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-pde}"
-DB_USER="${DB_USER:-dakhal_user}"
+DB_USER="${DB_USER:-pde_user}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 
 CORS_ORIGINS="${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
