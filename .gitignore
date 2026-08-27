@@ -55,6 +55,10 @@ Thumbs.db
 *.tfstate
 *.tfstate.*
 
+# ---- CloudFormation parameter files: real secrets, keep local ----
+# Copy aws/parameters/dev.json.example -> aws/parameters/dev.json and fill in.
+aws/parameters/dev.json
+
 # ---- Root-level docs/artifacts kept local only (not pushed to GitHub) ----
 # These are intentionally NOT tracked; they exist on disk locally.
 /DEPLOYMENT.md

@@ -71,6 +71,11 @@ Parameters:
     Default: 10.0.2.0/24
     Description: Private subnet for RDS.
     AllowedPattern: "((\\d{1,3})\\.){3}\\d{1,3}/\\d{1,2}"
+  DbSubnetCIDR2:
+    Type: String
+    Default: 10.0.3.0/24
+    Description: Second private subnet for RDS (RDS requires subnets in >= 2 AZs).
+    AllowedPattern: "((\\d{1,3})\\.){3}\\d{1,3}/\\d{1,2}"
 
   # --------------------------- Compute ------------------------------
   InstanceType:
@@ -226,6 +231,17 @@ Resources:
         - Key: Name
           Value: !Sub "${EnvironmentName}-db-subnet"
 
+  DbSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref DbSubnetCIDR2
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-db-subnet-2"
+
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -262,6 +278,12 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref DbSubnet
+      RouteTableId: !Ref DbRouteTable
+
+  DbSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DbSubnet2
       RouteTableId: !Ref DbRouteTable
 
   # =====================================================================
@@ -515,6 +537,7 @@ Resources:
       DBSubnetGroupDescription: Private subnets for RDS
       SubnetIds:
         - !Ref DbSubnet
+        - !Ref DbSubnet2
       Tags:
         - Key: Name
           Value: !Sub "${EnvironmentName}-db-subnet-group"
