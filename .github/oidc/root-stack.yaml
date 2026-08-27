@@ -1,0 +1,87 @@
+# =============================================================================
+# GitHub Actions OIDC + IAM role — ONE stack, ONE command.
+#
+# Creates BOTH things the Deploy workflow needs to authenticate to AWS without
+# storing access keys:
+#   1. The GitHub OIDC provider  (token.actions.githubusercontent.com)
+#   2. An IAM role  `github-actions`  that GitHub's Deploy job assumes
+#
+# First-time setup only. If you already created the OIDC provider manually,
+# re-running may error with "already exists" — see note at the bottom.
+#
+# DEPLOY (run from repo root):
+#   aws cloudformation deploy \
+#     --stack-name github-actions-oidc \
+#     --template-file .github/oidc/root-stack.yaml \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --parameter-overrides GitHubRepo="farooqui-owais/pde" \
+#     --region ap-south-1
+#
+# Confirm the role was created:
+#   aws iam get-role --role-name github-actions
+#
+# Then re-run the Deploy workflow on GitHub. The OIDC error will be resolved.
+# =============================================================================
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: farooqui-owais/pde
+    Description: The repository as "owner/repo", e.g. farooqui-owais/pde.
+  RoleName:
+    Type: String
+    Default: github-actions
+    Description: IAM role name the Deploy workflow assumes.
+
+Resources:
+  # ---------- 1. GitHub OIDC provider (the trust ORIGIN) ----------
+  # CloudFormation fetches the thumbprint for you — nothing to guess.
+  GithubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  # ---------- 2. IAM role the Deploy job assumes ----------
+  GithubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !GetAtt GithubOidcProvider.Arn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - !Sub "repo:${GitHubRepo}:*"
+      Policies:
+        - PolicyName: DeployActions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: FindInstance
+                Effect: Allow
+                Action: ["ec2:DescribeInstances"]
+                Resource: "*"
+              - Sid: RunDeploy
+                Effect: Allow
+                Action: ["ssm:SendCommand"]
+                Resource: "*"
+
+Outputs:
+  RoleArn:
+    Description: ARN of the role the Deploy workflow assumes
+    Value: !GetAtt GithubActionsRole.Arn
+  OidcProviderArn:
+    Description: ARN of the created GitHub OIDC provider
+    Value: !GetAtt GithubOidcProvider.Arn
