@@ -25,10 +25,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
 Parameters:
-  GitHubRepo:
-    Type: String
-    Default: farooqui-owais/pde
-    Description: The repository as "owner/repo", e.g. farooqui-owais/pde.
   RoleName:
     Type: String
     Default: github-actions
@@ -63,7 +59,13 @@ Resources:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
                 token.actions.githubusercontent.com:sub:
-                  - !Sub "repo:${GitHubRepo}:*"
+                  # GitHub now injects numeric IDs into `sub`:
+                  #   repo:farooqui-owais@65223090/pde@1348084002:ref:refs/heads/main
+                  # Literal strings (avoids intrinsics-in-list issues) matching
+                  # both the new ID-injected form and the legacy form, scoped to
+                  # exactly this repo. NOTE: update if owner/repo change.
+                  - "repo:farooqui-owais@*/pde@*:*"
+                  - "repo:farooqui-owais/pde:*"
       Policies:
         - PolicyName: DeployActions
           PolicyDocument:
