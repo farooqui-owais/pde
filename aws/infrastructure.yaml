@@ -88,7 +88,7 @@ Parameters:
     Description: Existing EC2 key-pair name for SSH.
   RepoUrl:
     Type: String
-    Default: https://github.com/your-org/pde.git
+    Default: https://github.com/farooqui-owais/pde.git
     Description: Git repo that contains pde-backend/ and pde-frontend/ folders.
   RepoBranch:
     Type: String
@@ -558,7 +558,7 @@ Resources:
       DBSubnetGroupName: !Ref DBSubnetGroup
       VPCSecurityGroups:
         - !Ref DatabaseSecurityGroup
-      BackupRetentionPeriod: 7
+      BackupRetentionPeriod: 1
       PreferredBackupWindow: "02:00-03:00"
       PreferredMaintenanceWindow: "sun:04:00-sun:05:00"
       DeletionProtection: false
