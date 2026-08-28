@@ -68,3 +68,15 @@ aws/parameters/dev.json
 /REUSABLE_PROJECT_PROMPT.md
 /iSarita_PDE_Manual_Extract_for_Antigravity.md
 /iSaritaPublicDataEntry_UserManual.pdf
+
+# ---- Docker / Kubernetes artifacts (NOT needed for the plain deploy) ----
+# The recommended, simplest deployment is `deploy/deploy-plain.sh`
+# (plain services: PostgreSQL + FastAPI/gunicorn + nginx; no Docker/K8s).
+# These files are kept only as reference on disk; they are untracked.
+/docker-compose.yml
+/k8s/
+/pde-backend/Dockerfile
+/pde-backend/.dockerignore
+/pde-backend/docker.md
+/pde-frontend/Dockerfile
+/pde-frontend/.dockerignore

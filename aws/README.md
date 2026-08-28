@@ -57,38 +57,41 @@ Edit `parameters/dev.json` and replace every `REPLACE_WITH_...`:
 - `AlertEmail` — where alarms go. Leave the whole entry out / empty to skip SNS.
 - `SshIngressCidr` — restrict to your IP (`1.2.3.4/32`) for production.
 
-## 3. Deploy
+## 3. Deploy (fresh CloudFormation stack)
 
-```bash
+Run from inside `aws\` in **PowerShell** — single line, **no parameter flags**.
+Every parameter in the template now has a safe default, so you don't need
+`--parameters` or `--parameter-overrides` at all:
+
+```powershell
 cd aws
 
-aws cloudformation deploy \
-  --stack-name pde-infra \
-  --template-file infrastructure.yaml \
-  --parameter-overrides file://parameters/dev.json \
-  --capabilities CAPABILITY_IAM \
-  --region ap-south-1
+# If a stack named pde-infra already exists from earlier attempts, delete it first:
+aws cloudformation delete-stack --stack-name pde-infra --region ap-south-1
+
+# Create a fresh stack (quote the file:// path so PowerShell passes it as one token):
+aws cloudformation create-stack --stack-name pde-infra --template-body "file://infrastructure.yaml" --capabilities CAPABILITY_IAM --region ap-south-1
 ```
+
+> `create-stack` returns immediately. Track progress:
+> `aws cloudformation describe-stack-events --stack-name pde-infra --region ap-south-1`
 
 Wait 10–15 minutes (user-data installs Node, Python, clones the repo, builds the
 frontend, writes `.env`, and starts `pde-api` + `nginx`).
 
-Check status:
+Check status (wait for `CREATE_COMPLETE`):
 
 ```bash
-aws cloudformation describe-stacks \
-  --stack-name pde-infra --region ap-south-1 \
-  --query "Stacks[0].Outputs"
+aws cloudformation describe-stacks --stack-name pde-infra --region ap-south-1 --query "Stacks[0].Outputs"
 ```
 
-Then open the app:
+Then open the app (PowerShell one-liner):
 
-```bash
-open "$(aws cloudformation describe-stacks --stack-name pde-infra --region ap-south-1 \
-  --query 'Stacks[0].Outputs[?OutputKey==`AppHttpUrl`].OutputValue' --output text)"
+```powershell
+$url = (aws cloudformation describe-stacks --stack-name pde-infra --region ap-south-1 --query "Stacks[0].Outputs[?OutputKey=='AppHttpUrl'].OutputValue" --output text); Start-Process $url
 ```
 
-Health check: `curl <public-ip>/api/health` → `{"status":"ok",...}`
+Health check: `curl http://<PublicIp>/api/health` → `{"status":"ok",...}`
 
 The API auto-creates its tables and seeds reference data on first start, so
 nothing else is required before registering a user.
@@ -104,7 +107,7 @@ curl -s http://127.0.0.1:8000/api/health
 
 | Symptom | Likely fix |
 | --- | --- |
-| Bootstrap aborted early (log says `ERROR: could not fetch repo`) | Private repo — redeploy with `RepoUrl=https://<GITHUB_TOKEN>@github.com/you/pde.git`. |
+| Bootstrap aborted early (log says `ERROR: could not fetch repo`) | Private repo — edit the `RepoUrl` default in `infrastructure.yaml` to `https://<GITHUB_TOKEN>@github.com/you/pde.git`, then re-create the stack. |
 | `502 Bad Gateway` | `pde-api` crashed — `sudo systemctl status pde-api`, check `journalctl`. |
 | CSRF / login fails over plain HTTP | No custom domain ⇒ `CSRF_COOKIE_SECURE=False` is set automatically. Re-deploy after adding a domain to switch to `True`. |
 | Blank / 404 on refresh | Nginx SPA fallback not applied — confirm `try_files ... /index.html` in `/etc/nginx/conf.d/pde.conf`. |
@@ -140,13 +143,10 @@ Free-tier guardrails baked into the template:
 2. Set `AppDomain=app.example.com`, `AcmCertificateArn=<arn>`,
    `CorsOrigins=https://app.example.com,http://localhost:5173,http://127.0.0.1:5173`,
    `TrustedHosts=app.example.com` in `dev.json`.
-3. Redeploy:
+3. Redeploy (PowerShell — single line, backticks optional):
 
-```bash
-aws cloudformation deploy --stack-name pde-infra \
-  --template-file infrastructure.yaml \
-  --parameter-overrides file://parameters/dev.json \
-  --capabilities CAPABILITY_IAM --region ap-south-1
+```powershell
+aws cloudformation deploy --stack-name pde-infra --template-file infrastructure.yaml --parameters "file://parameters/dev.json" --capabilities CAPABILITY_IAM --region ap-south-1
 ```
 
 CloudFormation will create a CloudFront distribution + Route 53 hosted zone and
@@ -174,7 +174,7 @@ Update (redeploy with changed params or template):
 ```bash
 aws cloudformation deploy --stack-name pde-infra \
   --template-file infrastructure.yaml \
-  --parameter-overrides file://parameters/dev.json \
+  --parameters "file://parameters/dev.json" \
   --capabilities CAPABILITY_IAM --region ap-south-1
 ```
 
