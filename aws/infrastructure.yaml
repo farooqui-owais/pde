@@ -86,6 +86,10 @@ Parameters:
   KeyPairName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: Existing EC2 key-pair name for SSH.
+  SshIngressCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed to SSH to the app server. Restrict to your IP (e.g. 1.2.3.4/32) for production.
   RepoUrl:
     Type: String
     Default: https://github.com/farooqui-owais/pde.git
@@ -308,7 +312,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref SshIngressCidr
           Description: SSH (restrict to your IP in prod)
       SecurityGroupEgress:
         - IpProtocol: -1
@@ -378,7 +382,7 @@ Resources:
       SubnetId: !Ref PublicSubnet
       SecurityGroupIds:
         - !Ref WebServerSecurityGroup
-      Monitoring: true
+      Monitoring: false
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
@@ -396,28 +400,59 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
-          # PDE bootstrap - Amazon Linux 2023
-          exec > >(tee /var/log/user-data.log | logger -t pde-boot -s 2>/dev/console) 2>&1
+          # PDE bootstrap - Amazon Linux 2023 (hardened + free-tier aware)
+          # Full log: cat /var/log/user-data.log
+          exec > >(tee /var/log/user-data.log) 2>&1
           set -e
 
-          # ---- system packages ----
+          # Never prompt for git credentials - fail fast + log instead of hanging.
+          export GIT_TERMINAL_PROMPT=0
+
+          echo "==> system packages"
           dnf -y update
           dnf -y install nginx git python3.11 python3.11-pip gcc python3.11-devel \
             libpq-devel curl tar gzip cronie
 
-          # ---- Node 20 (build-time only; Vite needs >=18) ----
+          echo "==> Node 20 (build-time only)"
           curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - || true
           dnf -y install nodejs || true
           node -v; npm -v
 
-          # ---- fetch app code ----
+          echo "==> fetch app (${RepoUrl} @ ${RepoBranch})"
           mkdir -p ${AppDir}
           cd ${AppDir}
-          if [ -d pde/.git ]; then
-            cd pde && git fetch --all && git checkout ${RepoBranch} && git pull
+          fetch_app() {
+            if [ -d pde/.git ]; then
+              (cd pde && git fetch --all && git checkout ${RepoBranch} && git pull)
+            else
+              git clone --branch ${RepoBranch} --depth 1 "$1" ${AppDir}/pde
+            fi
+          }
+          if fetch_app "${RepoUrl}"; then
+            : # ok
           else
-            git clone --branch ${RepoBranch} --depth 1 ${RepoUrl} ${AppDir}/pde
+            # Redact any token embedded in the URL before printing it to the log.
+            SAFE_URL=$(printf '%s' "${RepoUrl}" | sed -E 's#//[^@/]*@#//***@#')
+            echo "ERROR: could not fetch repo ($SAFE_URL)." >&2
+            echo "The repo is PRIVATE - redeploy passing"
+            echo "  RepoUrl=https://GITHUB_TOKEN@github.com/farooqui-owais/pde.git"
+            echo "(keep the token out of dev.json; see aws/README.md 'Private Git repo')." >&2
+            exit 1
           fi
+
+          # CI (GitHub Actions) triggers this file via SSM Run Command.
+          cat > /opt/pde/deploy-cd.sh <<'SCD'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          cd /opt/pde/pde
+          git fetch --all && git reset --hard && git pull --ff-only
+          /opt/pde/venv/bin/pip install -q -r pde-backend/requirements.txt
+          (cd pde-frontend && export VITE_API_BASE_URL=/ && npm ci && npm run build)
+          sudo systemctl restart pde-api
+          sudo systemctl restart nginx
+          curl -fsS http://127.0.0.1:8000/api/health || exit 1
+          SCD
+          chmod +x /opt/pde/deploy-cd.sh
 
           # ---- python env + backend deps ----
           python3.11 -m venv ${AppDir}/venv
@@ -479,6 +514,33 @@ Resources:
           WantedBy=multi-user.target
           EOF
           systemctl daemon-reload
+
+          # ---- wait for RDS (it can lag the instance) before starting the API ----
+          set -a
+          . ${AppDir}/pde/pde-backend/.env
+          set +a
+          echo "==> wait for database"
+          ${AppDir}/venv/bin/python - <<'PY'
+          import os, socket, time
+          url = os.environ.get("DATABASE_URL", "")
+          host, port = "localhost", 5432
+          if "@" in url:
+              hp = url.split("@", 1)[1].split("/")[0]
+              host, _, port_s = hp.rpartition(":")
+              port = int(port_s or 5432)
+          for _ in range(90):
+              try:
+                  s = socket.create_connection((host, port), timeout=5)
+                  s.close()
+                  print(f"database reachable at {host}:{port}")
+                  break
+              except OSError:
+                  time.sleep(5)
+          else:
+              raise SystemExit(f"database not reachable at {host}:{port}")
+          PY
+
+          echo "==> start API + nginx"
           systemctl enable --now pde-api
 
           # ---- nginx: SPA + /api proxy (quoted heredoc keeps nginx vars) ----
@@ -510,7 +572,17 @@ Resources:
           systemctl enable --now nginx
           systemctl restart nginx
 
+          echo "==> wait for API health"
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
+              echo "API is healthy after $i attempts"
+              break
+            fi
+            sleep 5
+          done
+
           echo "PDE bootstrap complete"
+          curl -fsS http://127.0.0.1:8000/api/health && echo
 
   # =====================================================================
   # 5. ELASTIC IP (stable origin for DNS / CloudFront; free while attached)
@@ -564,7 +636,7 @@ Resources:
       DeletionProtection: false
       StorageEncrypted: true
       AutoMinorVersionUpgrade: true
-      MaxAllocatedStorage: 100
+      MaxAllocatedStorage: 20
       Tags:
         - Key: Name
           Value: !Sub "${EnvironmentName}-postgres"

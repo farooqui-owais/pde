@@ -19,6 +19,9 @@
 # =============================================================================
 set -euo pipefail
 
+# Never prompt for git credentials - fail fast + log instead of hanging.
+export GIT_TERMINAL_PROMPT=0
+
 APP_DIR="${APP_DIR:-/opt/pde}"
 REPO_URL="${REPO_URL:-https://github.com/farooqui-owais/pde.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
@@ -50,11 +53,34 @@ echo "==> fetch app ($REPO_URL @ $REPO_BRANCH)"
 sudo mkdir -p "$APP_DIR"
 sudo chown -R ec2-user:ec2-user "$APP_DIR"
 cd "$APP_DIR"
-if [ -d "$APP_DIR/pde/.git" ]; then
-  cd "$APP_DIR/pde" && git fetch --all && git checkout "$REPO_BRANCH" && git pull
-else
-  git clone --branch "$REPO_BRANCH" --depth 1 "$REPO_URL" "$APP_DIR/pde"
+fetch_app() {
+  if [ -d "$APP_DIR/pde/.git" ]; then
+    (cd "$APP_DIR/pde" && git fetch --all && git checkout "$REPO_BRANCH" && git pull)
+  else
+    git clone --branch "$REPO_BRANCH" --depth 1 "$1" "$APP_DIR/pde"
+  fi
+}
+if ! fetch_app "$REPO_URL"; then
+  # Redact any token embedded in the URL before printing it.
+  SAFE_URL=$(printf '%s' "$REPO_URL" | sed -E 's#//[^@/]*@#//***@#')
+  echo "ERROR: could not fetch repo ($SAFE_URL)." >&2
+  echo "For a PRIVATE repo re-run with REPO_URL=https://GITHUB_TOKEN@github.com/you/pde.git" >&2
+  exit 1
 fi
+
+# CI (GitHub Actions) triggers this file via SSM Run Command.
+cat > /opt/pde/deploy-cd.sh <<'SCD'
+#!/usr/bin/env bash
+set -euo pipefail
+cd /opt/pde/pde
+git fetch --all && git reset --hard && git pull --ff-only
+/opt/pde/venv/bin/pip install -q -r pde-backend/requirements.txt
+(cd pde-frontend && export VITE_API_BASE_URL=/ && npm ci && npm run build)
+sudo systemctl restart pde-api
+sudo systemctl restart nginx
+curl -fsS http://127.0.0.1:8000/api/health || exit 1
+SCD
+chmod +x /opt/pde/deploy-cd.sh
 
 echo "==> python env + backend deps"
 python3.11 -m venv "$APP_DIR/venv"
@@ -111,6 +137,23 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 sudo systemctl daemon-reload
+
+echo "==> wait for database (RDS can lag the instance)"
+"$APP_DIR/venv/bin/python" - "$DB_HOST" "$DB_PORT" <<'PY'
+import socket, time, sys
+host, port = sys.argv[1], int(sys.argv[2])
+for _ in range(90):
+    try:
+        s = socket.create_connection((host, port), timeout=5)
+        s.close()
+        print(f"database reachable at {host}:{port}")
+        break
+    except OSError:
+        time.sleep(5)
+else:
+    raise SystemExit(f"database not reachable at {host}:{port}")
+PY
+
 sudo systemctl enable --now pde-api
 
 echo "==> nginx"
@@ -142,6 +185,15 @@ sudo rm -f /etc/nginx/conf.d/default.conf
 sudo nginx -t
 sudo systemctl enable --now nginx
 sudo systemctl restart nginx
+
+echo "==> wait for API health"
+for i in $(seq 1 30); do
+  if curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
+    echo "API is healthy after $i attempts"
+    break
+  fi
+  sleep 5
+done
 
 echo "PDE bootstrap complete. Health check:"
 curl -fsS http://127.0.0.1:8000/api/health && echo

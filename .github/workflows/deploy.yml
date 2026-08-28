@@ -39,6 +39,7 @@ jobs:
             echo "No instance tagged Name=pde-app found." >&2
             exit 1
           fi
+          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
           aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
@@ -46,9 +47,17 @@ jobs:
             --timeout-seconds 600 \
             --output text
 
-      # 3) Post-deploy health check (falls back to a direct localhost probe).
+      # 3) Post-deploy health check against the instance's real public IP
+      #    (re-resolved here — runner shells do not share variables).
       - name: Health check
         run: |
-          curl --fail --retry 5 --retry-delay 20 \
-            https://<APP_DOMAIN>/api/health || \
-            curl --fail --retry 3 http://127.0.0.1:8000/api/health
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" = "None" ]; then
+            echo "No public IP on the instance." >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error \
+            --retry 5 --retry-delay 20 \
+            "http://${PUBLIC_IP}/api/health"

@@ -48,10 +48,14 @@ bootstrap builds + runs the application automatically.
 Edit `parameters/dev.json` and replace every `REPLACE_WITH_...`:
 
 - `KeyPairName` — your existing key pair name.
-- `RepoUrl`, `RepoBranch` — your repo.
+- `RepoUrl`, `RepoBranch` — your repo. **`pde` is a private repo**; a bare
+  `https://github.com/...` or `git@github.com:...` clone will fail on a fresh
+  EC2 instance (no credentials). Pass a token-bearing URL **at deploy time only**
+  (never commit it): `RepoUrl=https://<GITHUB_TOKEN>@github.com/you/pde.git`.
 - `DBPassword` — letters+digits only (≥12 chars) so it is safe inside `.env`.
 - `SecretKey` — a long random string (≥32 chars).
 - `AlertEmail` — where alarms go. Leave the whole entry out / empty to skip SNS.
+- `SshIngressCidr` — restrict to your IP (`1.2.3.4/32`) for production.
 
 ## 3. Deploy
 
@@ -100,6 +104,7 @@ curl -s http://127.0.0.1:8000/api/health
 
 | Symptom | Likely fix |
 | --- | --- |
+| Bootstrap aborted early (log says `ERROR: could not fetch repo`) | Private repo — redeploy with `RepoUrl=https://<GITHUB_TOKEN>@github.com/you/pde.git`. |
 | `502 Bad Gateway` | `pde-api` crashed — `sudo systemctl status pde-api`, check `journalctl`. |
 | CSRF / login fails over plain HTTP | No custom domain ⇒ `CSRF_COOKIE_SECURE=False` is set automatically. Re-deploy after adding a domain to switch to `True`. |
 | Blank / 404 on refresh | Nginx SPA fallback not applied — confirm `try_files ... /index.html` in `/etc/nginx/conf.d/pde.conf`. |
@@ -118,6 +123,11 @@ Stays inside the **AWS 12-month free tier** (new account):
 Deliberately **not** used (they would bill you): NAT Gateway, Application Load
 Balancer, detached EIPs, Multi-AZ RDS. The DB lives in a private subnet with a
 private route table so it needs **no NAT**.
+
+Free-tier guardrails baked into the template:
+- EC2 `Monitoring` is off (standard CloudWatch metrics, not billed detail monitoring).
+- RDS `MaxAllocatedStorage` is capped at 20 GB (no paid storage autoscaling).
+- EIP is attached to the instance (free only while attached, never idled/detached).
 
 > After the 12-month free tier you'll be billed. Rough ongoing estimate
 > (ap-south-1, on-demand, single instance + DB): **~$14–20/mo**. Use a Savings
