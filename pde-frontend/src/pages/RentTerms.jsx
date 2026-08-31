@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
@@ -8,6 +9,7 @@ import "./RentTerms.css";
 const BLANK_SLABS = Array.from({ length: 5 }, () => ({ to_month: "", rent: "" }));
 
 export default function RentTerms() {
+  const { t } = useTranslation(["pages", "common"]);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -47,7 +49,7 @@ export default function RentTerms() {
       });
       navigate(`/entries/${id}/properties`);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not save rent terms.");
+      setError(err?.response?.data?.detail || t("rent.couldNotSave"));
     } finally {
       setSaving(false);
     }
@@ -57,33 +59,33 @@ export default function RentTerms() {
     <div className="page-shell">
       <HeaderSarita />
       <div className="page-body rent-body">
-        <h1 className="rent-title">Rent &amp; Other Terms</h1>
+        <h1 className="rent-title">{t("rent.title")}</h1>
 
         {error && <div className="banner banner-error">{error}</div>}
 
         <div className="rent-row">
-          <label>License Period in Months:</label>
+          <label>{t("rent.licensePeriod")}</label>
           <input value={licensePeriod} onChange={(e) => setLicensePeriod(e.target.value)} type="number" min="0" />
         </div>
         <div className="rent-row">
-          <label>From Date:</label>
+          <label>{t("rent.fromDate")}</label>
           <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         </div>
         <div className="rent-row">
-          <label>To Date :</label>
+          <label>{t("rent.toDate")}</label>
           <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} disabled />
         </div>
 
         <table className="rent-table">
           <thead>
             <tr>
-              <th>From Month</th>
-              <th>To Month</th>
+              <th>{t("rent.fromMonth")}</th>
+              <th>{t("rent.toMonth")}</th>
               <th>
-                Rent(Rs)
+                {t("rent.rentRs")}
                 <span className="rent-increment">
                   <input type="checkbox" checked={percentIncrement} onChange={(e) => setPercentIncrement(e.target.checked)} />
-                  % increment in rent (Yearly)
+                  {t("rent.pctIncrement")}
                 </span>
               </th>
             </tr>
@@ -100,31 +102,31 @@ export default function RentTerms() {
         </table>
 
         <div className="rent-radio-row">
-          <label>Property Use</label>
+          <label>{t("rent.propertyUse")}</label>
           <span>
             <input type="radio" checked={propertyUse === "Residential"} onChange={() => setPropertyUse("Residential")} />
-            Residential
+            {t("rent.residential")}
           </span>
           <span>
             <input type="radio" checked={propertyUse === "Non-Residential"} onChange={() => setPropertyUse("Non-Residential")} />
-            Non-Residential
+            {t("rent.nonResidential")}
           </span>
         </div>
 
         <div className="rent-row">
-          <label>Refundable Deposit</label>
+          <label>{t("rent.refundableDeposit")}</label>
           <input value={refundableDeposit} onChange={(e) => setRefundableDeposit(e.target.value)} type="number" min="0" />
         </div>
         <div className="rent-row">
-          <label>Non Refundable Deposit</label>
+          <label>{t("rent.nonRefundableDeposit")}</label>
           <input value={nonRefundableDeposit} onChange={(e) => setNonRefundableDeposit(e.target.value)} type="number" min="0" />
         </div>
 
         <div className="rent-actions">
           <button className="btn btn-green" onClick={handleSave} disabled={saving}>
-            {saving ? "Saving\u2026" : "OK"}
+            {saving ? t("common:saving") : t("common:ok")}
           </button>
-          <button className="btn btn-red" onClick={() => navigate("/tokens")}>CANCEL</button>
+          <button className="btn btn-red" onClick={() => navigate("/tokens")}>{t("common:cancel").toUpperCase()}</button>
         </div>
       </div>
       <Footer office={{ dig: "Latur", jdr: "Latur", sro: "Joint S.R.Udgir 1" }} />

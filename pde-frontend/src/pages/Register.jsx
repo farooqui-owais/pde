@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderTeal from "../components/HeaderTeal.jsx";
 import Footer from "../components/Footer.jsx";
@@ -15,6 +16,7 @@ const EMPTY = {
 };
 
 export default function Register() {
+  const { t } = useTranslation(["auth", "common"]);
   const navigate = useNavigate();
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState("");
@@ -39,17 +41,17 @@ export default function Register() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError(""); setSuccess("");
-    if (form.password !== form.confirm_password) { setError("Password and confirm password do not match."); return; }
-    if (form.password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (form.password !== form.confirm_password) { setError(t("auth:passwordMismatchReg")); return; }
+    if (form.password.length < 8) { setError(t("auth:passwordTooShortReg")); return; }
 
     setLoading(true);
     try {
       const { confirm_password, ...payload } = form;
       await api.post("/api/auth/register", payload);
-      setSuccess("Account created. You can now log in.");
+      setSuccess(t("auth:accountCreated"));
       setTimeout(() => navigate("/login"), 1200);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Registration failed.");
+      setError(err?.response?.data?.detail || t("auth:registrationFailed"));
     } finally {
       setLoading(false);
     }
@@ -59,77 +61,74 @@ export default function Register() {
     <div className="page-shell">
       <HeaderTeal />
       <div className="page-body reg-body">
-        <Link to="/login" className="reg-back">&larr; Back</Link>
+        <Link to="/login" className="reg-back">&larr; {t("common:back")}</Link>
         <div className="reg-panel">
-          <h1 className="reg-title">New Users Sign Up</h1>
+          <h1 className="reg-title">{t("auth:newUsersSignUp")}</h1>
 
           {error && <div className="banner banner-error">{error}</div>}
           {success && <div className="banner banner-success">{success}</div>}
 
           <form onSubmit={handleSubmit}>
-            <div className="reg-section-title">Contact Information &ndash;</div>
-            <div className="reg-hint">[Fields marked with (*) are Mandatory.]</div>
+            <div className="reg-section-title">{t("auth:contactInformation")}</div>
+            <div className="reg-hint">{t("auth:mandatoryFields")}</div>
 
             <div className="reg-row">
-              <label>* Name :</label>
+              <label>{t("auth:name")}</label>
               <select value={form.title} onChange={(e) => update("title", e.target.value)}>
                 <option>Mr.</option><option>Ms.</option><option>Mrs.</option>
               </select>
-              <input placeholder="First Name" value={form.first_name} onChange={(e) => update("first_name", e.target.value)} required />
-              <input placeholder="Last Name" value={form.last_name} onChange={(e) => update("last_name", e.target.value)} />
+              <input placeholder={t("auth:firstNamePlaceholder")} value={form.first_name} onChange={(e) => update("first_name", e.target.value)} required />
+              <input placeholder={t("auth:lastNamePlaceholder")} value={form.last_name} onChange={(e) => update("last_name", e.target.value)} />
             </div>
 
             <div className="reg-divider" />
-            <div className="reg-section-title">Login Details</div>
+            <div className="reg-section-title">{t("auth:loginDetails")}</div>
 
             <div className="reg-row-2">
-              <label>* User Name :</label>
+              <label>{t("auth:userNameColon")}</label>
               <input value={form.username} onChange={(e) => update("username", e.target.value)} onBlur={checkUsername} required />
-              <button type="button" className="btn btn-blue" onClick={checkUsername}>Check availability</button>
+              <button type="button" className="btn btn-blue" onClick={checkUsername}>{t("auth:checkAvailability")}</button>
             </div>
-            {usernameStatus === true && <div className="reg-hint" style={{ color: "var(--green)" }}>Available</div>}
-            {usernameStatus === false && <div className="reg-hint" style={{ color: "var(--red)" }}>Already taken</div>}
+            {usernameStatus === true && <div className="reg-hint" style={{ color: "var(--green)" }}>{t("auth:available")}</div>}
+            {usernameStatus === false && <div className="reg-hint" style={{ color: "var(--red)" }}>{t("auth:alreadyTaken")}</div>}
 
             <div className="reg-row-2">
-              <label>* Password :</label>
+              <label>{t("auth:passwordColon")}</label>
               <input type="password" value={form.password} onChange={(e) => update("password", e.target.value)} required />
-              <input type="password" placeholder="Re enter Password" value={form.confirm_password} onChange={(e) => update("confirm_password", e.target.value)} required />
+              <input type="password" placeholder={t("auth:reEnterPassword")} value={form.confirm_password} onChange={(e) => update("confirm_password", e.target.value)} required />
             </div>
 
             <div className="reg-row-2">
-              <label>* Security Question :</label>
+              <label>{t("auth:securityQuestion")}</label>
               <select value={form.security_question} onChange={(e) => update("security_question", e.target.value)}>
-                <option value="">Select Security Question</option>
-                <option>What is your birth city?</option>
-                <option>What was your first school?</option>
+                <option value="">{t("auth:selectSecurityQuestion")}</option>
+                <option>{t("auth:birthCityQuestion")}</option>
+                <option>{t("auth:firstSchoolQuestion")}</option>
               </select>
-              <input placeholder="Security Answer" value={form.security_answer} onChange={(e) => update("security_answer", e.target.value)} />
+              <input placeholder={t("auth:securityAnswerPlaceholder")} value={form.security_answer} onChange={(e) => update("security_answer", e.target.value)} />
             </div>
 
             <div className="reg-note">
-              Note : 1. Username contains alphanumeric characters, underscore and dot. 6-15 Characters
-              Allowed. Username must Start with alphabet.<br />
-              2. Password length must be minimum 8 characters. Password must contain atleast one
-              (capital letter, small letter, special character and digit) e.g abcdA09@
+              {t("auth:regNote")}
             </div>
 
             <div className="reg-row-2">
-              <label>* Mobile Number :</label>
+              <label>{t("auth:mobileNumberColon")}</label>
               <input value={form.mobile_number} onChange={(e) => update("mobile_number", e.target.value)} required />
-              <input placeholder="Land Line Number" value={form.landline_number} onChange={(e) => update("landline_number", e.target.value)} />
+              <input placeholder={t("auth:landlinePlaceholder")} value={form.landline_number} onChange={(e) => update("landline_number", e.target.value)} />
             </div>
             <div className="reg-row-2">
-              <label>* Email ID :</label>
+              <label>{t("auth:emailIdColon")}</label>
               <input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} required />
-              <input placeholder="Alternate Email ID" value={form.alternate_email} onChange={(e) => update("alternate_email", e.target.value)} />
+              <input placeholder={t("auth:alternateEmailPlaceholder")} value={form.alternate_email} onChange={(e) => update("alternate_email", e.target.value)} />
             </div>
             <div className="reg-row-2">
-              <label>PAN Number :</label>
+              <label>{t("auth:panNumberColon")}</label>
               <input value={form.pan_number} onChange={(e) => update("pan_number", e.target.value)} />
               <span />
             </div>
             <div className="reg-row-2">
-              <label>* PIN Code :</label>
+              <label>{t("auth:pinCodeColon")}</label>
               <input value={form.pin_code} onChange={(e) => update("pin_code", e.target.value)} required />
               <span />
             </div>
@@ -137,37 +136,37 @@ export default function Register() {
             <div className="reg-row-2">
               <label></label>
               <select value={form.state} onChange={(e) => update("state", e.target.value)}>
-                <option value="">--Select State--</option>
+                <option value="">{t("auth:selectState")}</option>
                 <option>Maharashtra</option>
               </select>
               <select value={form.city} onChange={(e) => update("city", e.target.value)}>
-                <option value="">--Select City--</option>
+                <option value="">{t("auth:selectCity")}</option>
                 <option>Pune</option>
               </select>
             </div>
 
-            <div className="reg-section-title" style={{ marginTop: 20 }}>* Address Details :</div>
+            <div className="reg-section-title" style={{ marginTop: 20 }}>{t("auth:addressDetails")}</div>
             <div className="reg-addr-row">
               <span />
-              <input placeholder="Home No./Flat No." value={form.house_no} onChange={(e) => update("house_no", e.target.value)} />
-              <input placeholder="Building Name or Number/Society" value={form.building_name} onChange={(e) => update("building_name", e.target.value)} />
+              <input placeholder={t("auth:homeNoPlaceholder")} value={form.house_no} onChange={(e) => update("house_no", e.target.value)} />
+              <input placeholder={t("auth:buildingPlaceholder")} value={form.building_name} onChange={(e) => update("building_name", e.target.value)} />
             </div>
             <div className="reg-addr-row">
               <span />
-              <input placeholder="Road/Street" value={form.road_street} onChange={(e) => update("road_street", e.target.value)} />
-              <input placeholder="Area/Locality" value={form.area_locality} onChange={(e) => update("area_locality", e.target.value)} />
+              <input placeholder={t("auth:roadPlaceholder")} value={form.road_street} onChange={(e) => update("road_street", e.target.value)} />
+              <input placeholder={t("auth:areaPlaceholder")} value={form.area_locality} onChange={(e) => update("area_locality", e.target.value)} />
             </div>
 
             <div className="reg-actions">
               <button className="btn btn-green" type="submit" disabled={loading}>
-                {loading ? "Saving\u2026" : "Save"}
+                {loading ? t("common:saving") : t("common:save")}
               </button>
-              <button type="button" className="btn btn-red" onClick={() => setForm(EMPTY)}>Reset</button>
+              <button type="button" className="btn btn-red" onClick={() => setForm(EMPTY)}>{t("auth:reset")}</button>
             </div>
           </form>
         </div>
       </div>
-      <Footer copyright="Copyright \u00A9 (2026) DakhalNama 1.9, National Informatics Centre, Pune" />
+      <Footer copyright="Copyright \u00A9 (2026) National Informatics Centre, Pune" />
     </div>
   );
 }

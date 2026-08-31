@@ -9,8 +9,10 @@ import LanguageDetector from "i18next-browser-languagedetector";
 
 import commonEN from "./locales/en/common.json";
 import authEN from "./locales/en/auth.json";
+import pagesEN from "./locales/en/pages.json";
 import commonMR from "./locales/mr/common.json";
 import authMR from "./locales/mr/auth.json";
+import pagesMR from "./locales/mr/pages.json";
 
 export const SUPPORTED_LANGUAGES = [
   { code: "en", label: "English", labelLocal: "English" },
@@ -21,15 +23,15 @@ export const DEFAULT_LANGUAGE = "en";
 
 export const LANGUAGE_STORAGE_KEY = "pde_lang";
 
-const ns = ["common", "auth"];
+const ns = ["common", "auth", "pages"];
 
 i18n
   .use(initReactI18next)
   .use(LanguageDetector)
   .init({
     resources: {
-      en: { common: commonEN, auth: authEN },
-      mr: { common: commonMR, auth: authMR },
+      en: { common: commonEN, auth: authEN, pages: pagesEN },
+      mr: { common: commonMR, auth: authMR, pages: pagesMR },
     },
     fallbackLng: DEFAULT_LANGUAGE,
     defaultNS: "common",

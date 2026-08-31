@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
@@ -9,6 +10,7 @@ import "./DocumentEntry.css";
 const todayIso = new Date().toISOString().slice(0, 10);
 
 export default function DocumentEntry() {
+  const { t } = useTranslation(["pages", "common"]);
   const { state } = useLocation();
   const navigate = useNavigate();
 
@@ -41,7 +43,7 @@ export default function DocumentEntry() {
     if (!tokenId) {
       api.post("/api/tokens", { language: "\u092e\u0930\u093e\u0920\u0940" })
         .then((r) => setTokenId(r.data.id))
-        .catch(() => setError("Could not open an entry token."));
+        .catch(() => setError(t("document.couldNotOpenToken")));
     }
   }, [tokenId]);
 
@@ -110,7 +112,7 @@ export default function DocumentEntry() {
       await ensureEntrySaved();
       setShowStampModal(true);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not open stamp payment details.");
+      setError(err?.response?.data?.detail || t("document.couldNotOpenStampDetails"));
     }
   }
 
@@ -119,18 +121,18 @@ export default function DocumentEntry() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError(""); setSuccess("");
-    if (!tokenId) { setError("No entry token yet \u2014 please wait a moment and try again."); return; }
+    if (!tokenId) { setError(t("document.noEntryToken")); return; }
     setSaving(true);
     try {
       const id = await ensureEntrySaved();
-      setSuccess("Presentation details saved.");
+      setSuccess(t("document.savedPresentation"));
       if (selectedArticle?.has_rent_terms) {
         navigate(`/entries/${id}/rent-terms`);
       } else {
         navigate(`/entries/${id}/properties`);
       }
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not save this entry.");
+      setError(err?.response?.data?.detail || t("document.couldNotSave"));
     } finally {
       setSaving(false);
     }
@@ -140,20 +142,18 @@ export default function DocumentEntry() {
     <div className="page-shell">
       <HeaderSarita />
       <div className="page-body entry-body">
-        <h1 className="entry-title">Presentation Step1</h1>
-        <div className="entry-hint">Type In English get in Marathi</div>
+        <h1 className="entry-title">{t("document.title")}</h1>
+        <div className="entry-hint">{t("document.hint")}</div>
 
         {showModal && (
           <div className="entry-modal-backdrop" onClick={() => setShowModal(false)}>
             <div className="entry-modal" onClick={(e) => e.stopPropagation()}>
               <div className="ledger-rule" />
               <p>
-                English Data Entry is Compulsory. Make sure that the spelling of
-                Property/Party/Identifiers name is correct as it gets reflected on
-                important Mutation/Document.
+                {t("document.modalText")}
               </p>
               <div className="ledger-rule" />
-              <button className="btn btn-red" onClick={() => setShowModal(false)}>Close X</button>
+              <button className="btn btn-red" onClick={() => setShowModal(false)}>{t("document.closeX")}</button>
             </div>
           </div>
         )}
@@ -163,78 +163,77 @@ export default function DocumentEntry() {
 
         <form onSubmit={handleSubmit}>
           <div className="entry-grid">
-            <label>Select Article</label>
+            <label>{t("document.selectArticle")}</label>
             <select value={form.article_type_id} onChange={(e) => update("article_type_id", e.target.value)} required>
-              <option value="">--Select Article--</option>
+              <option value="">{t("document.selectArticleOption")}</option>
               {articleTypes.map((a) => (
                 <option key={a.id} value={a.id}>{a.code}-{a.name}</option>
               ))}
             </select>
-            <label>Document Title</label>
+            <label>{t("document.documentTitle")}</label>
             <select value={form.document_title} onChange={(e) => update("document_title", e.target.value)}>
-              <option value="">--Select Article Description--</option>
+              <option value="">{t("document.selectArticleDesc")}</option>
               {documentTitles.map((t) => (
                 <option key={t.id} value={t.label_marathi}>{t.label_marathi}</option>
               ))}
             </select>
 
-            <label>Date of Execution</label>
+            <label>{t("document.dateOfExecution")}</label>
             <input type="date" value={form.date_of_execution} onChange={(e) => update("date_of_execution", e.target.value)} />
             <span />
             <span />
 
-            <label>Date of Presentation</label>
+            <label>{t("document.dateOfPresentation")}</label>
             <input type="date" value={form.date_of_presentation} onChange={(e) => update("date_of_presentation", e.target.value)} />
             <span />
             <span />
 
-            <label>Market Value</label>
+            <label>{t("document.marketValue")}</label>
             <input type="number" min="0" value={form.market_value} onChange={(e) => update("market_value", e.target.value)} onBlur={calculateStampDuty} />
             <span />
             <span />
 
-            <label>Consideration Amount</label>
+            <label>{t("document.considerationAmount")}</label>
             <input type="number" min="0" value={form.consideration_amount} onChange={(e) => update("consideration_amount", e.target.value)} onBlur={calculateStampDuty} />
             <span />
             <span />
 
-            <label>Stamp Duty</label>
+            <label>{t("document.stampDuty")}</label>
             <input readOnly value={stampDuty ? `\u20b9 ${stampDuty.stamp_duty}` : ""} />
-            <button type="button" className="btn btn-blue" onClick={calculateStampDuty}>Calculate Stamp Duty</button>
+            <button type="button" className="btn btn-blue" onClick={calculateStampDuty}>{t("document.calculateStampDuty")}</button>
             <span />
 
-            <label>No of Pages</label>
+            <label>{t("document.noOfPages")}</label>
             <input type="number" min="0" value={form.number_of_pages} onChange={(e) => update("number_of_pages", e.target.value)} />
-            <span className="entry-hint-inline">(Excluding Summary Pages)</span>
+            <span className="entry-hint-inline">{t("document.excludingSummary")}</span>
             <span />
 
-            <label>Stamp Duty Paid</label>
+            <label>{t("document.stampDutyPaid")}</label>
             <input readOnly value={stampDuty ? `\u20b9 ${stampDuty.stamp_duty}` : ""} />
-            <button type="button" className="btn btn-outline" onClick={openStampDetails}>Stamp Duty Pay Details</button>
+            <button type="button" className="btn btn-outline" onClick={openStampDetails}>{t("document.stampDutyPayDetails")}</button>
             <span />
 
-            <label>Stamp Duty Difference</label>
+            <label>{t("document.stampDutyDifference")}</label>
             <input readOnly value="0.00" />
             <span /><span />
 
             {stampDuty && (
               <div className="stamp-box">
-                Estimated at {stampDuty.rate_percent}% \u2014 illustrative only, verify the
-                official rate for this article/area before relying on it. Need the full
+                {t("document.estimatedAt", { rate: stampDuty.rate_percent })} Need the full
                 clause-by-clause breakdown?{" "}
                 <a href="#" onClick={(e) => { e.preventDefault(); navigate("/stamp-duty-calculate"); }}>
-                  Open Stamp Duty Calculate
+                  {t("document.openStampDutyCalculate")}
                 </a>
               </div>
             )}
           </div>
 
-          <div className="entry-notice-red">Receipt will be generated on Presentor's Name</div>
+          <div className="entry-notice-red">{t("document.receiptOnPresentor")}</div>
 
           <div className="entry-actions">
-            <button type="button" className="btn btn-blue" onClick={() => navigate("/dashboard")}>Previous/\u092e\u093e\u0917\u0947</button>
+            <button type="button" className="btn btn-blue" onClick={() => navigate("/dashboard")}>{t("common:previous")}</button>
             <button type="submit" className="btn btn-green" disabled={saving}>
-              {saving ? "Saving\u2026" : "Next/\u092a\u0941\u0922\u0947"}
+              {saving ? t("common:saving") : t("common:next")}
             </button>
           </div>
 

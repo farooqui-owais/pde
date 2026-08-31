@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
 import "./EntrySteps.css";
 
 export default function DataEntryReport() {
+  const { t } = useTranslation(["pages", "common"]);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -16,7 +18,7 @@ export default function DataEntryReport() {
   useEffect(() => {
     api.get(`/api/documents/${id}/report`)
       .then((r) => setReport(r.data))
-      .catch((err) => setError(err?.response?.data?.detail || "Could not load the report."));
+      .catch((err) => setError(err?.response?.data?.detail || t("report.couldNotLoad")));
   }, [id]);
 
   async function handleNext() {
@@ -26,7 +28,7 @@ export default function DataEntryReport() {
       await api.post(`/api/documents/${id}/complete`);
       navigate(`/entries/${id}/confirmation`);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not complete this entry.");
+      setError(err?.response?.data?.detail || t("report.couldNotComplete"));
     } finally {
       setCompleting(false);
     }
@@ -44,62 +46,60 @@ export default function DataEntryReport() {
     return (
       <div className="page-shell">
         <HeaderSarita />
-        <div className="page-body entry-body">Loading report…</div>
+        <div className="page-body entry-body">{t("report.loading")}</div>
       </div>
     );
   }
 
   const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB") : "—");
-  const fmtParty = (p) => `${p.name || "—"}${p.age ? `, Age: ${p.age}` : ""}${p.address ? `, ${p.address}` : ""}`;
+  const fmtParty = (p) => `${p.name || "—"}${p.age ? `${t("report.printfAge")} ${p.age}` : ""}${p.address ? `, ${p.address}` : ""}`;
 
   return (
     <div className="page-shell">
       <HeaderSarita />
       <div className="page-body entry-body">
-        <h1 className="entry-title">Public Data Entry Report</h1>
+        <h1 className="entry-title">{t("report.title")}</h1>
         {error && <div className="banner banner-error">{error}</div>}
 
         <div className="report-sheet">
           <div className="report-sheet-head">
-            <div className="report-title-mr">Public Data Entry Report<br /><small>Information filled in for document registration</small></div>
-            <div className="report-meta">Token: {report.token_number}<br />Date: {fmtDate(new Date())}</div>
+            <div className="report-title-mr">{t("report.title")}<br /><small>{t("report.subtitle")}</small></div>
+            <div className="report-meta">{t("report.token")} {report.token_number}<br />{t("report.date")} {fmtDate(new Date())}</div>
           </div>
 
-          <div className="report-row"><span>(1)</span><b>Document Type</b><span>{report.document_type || "—"}</span></div>
-          <div className="report-row"><span>(2)</span><b>Consideration</b><span>Rs. {report.consideration_amount ?? "—"}</span></div>
-          <div className="report-row"><span>(3)</span><b>Market Value</b><span>Rs. {report.market_value ?? "—"}</span></div>
-          <div className="report-row"><span>(4)</span><b>Required Stamp Duty</b><span>Rs. {report.required_stamp_duty ?? "—"}</span></div>
-          <div className="report-row"><span>(5)</span><b>Date of Execution</b><span>{fmtDate(report.date_of_execution)}</span></div>
-          <div className="report-row"><span>(6)</span><b>Village Name</b><span>{report.village_name || "—"}</span></div>
-          <div className="report-row"><span>(7)</span><b>Number of Pages</b><span>{report.number_of_pages ?? "—"}</span></div>
-          <div className="report-row"><span>(8)</span><b>Survey/C.T.S. Number(s)</b><span>{report.survey_cts_numbers?.join(", ") || "—"}</span></div>
-          <div className="report-row"><span>(9)</span><b>Tenure Type</b><span>{report.tenure_and_area || "—"}</span></div>
-          <div className="report-row"><span>(10)</span><b>Area</b><span>{report.area ?? "—"}</span></div>
+          <div className="report-row"><span>(1)</span><b>{t("report.docType")}</b><span>{report.document_type || "—"}</span></div>
+          <div className="report-row"><span>(2)</span><b>{t("report.consideration")}</b><span>Rs. {report.consideration_amount ?? "—"}</span></div>
+          <div className="report-row"><span>(3)</span><b>{t("report.marketValue")}</b><span>Rs. {report.market_value ?? "—"}</span></div>
+          <div className="report-row"><span>(4)</span><b>{t("report.requiredStampDuty")}</b><span>Rs. {report.required_stamp_duty ?? "—"}</span></div>
+          <div className="report-row"><span>(5)</span><b>{t("report.dateOfExecution")}</b><span>{fmtDate(report.date_of_execution)}</span></div>
+          <div className="report-row"><span>(6)</span><b>{t("report.villageName")}</b><span>{report.village_name || "—"}</span></div>
+          <div className="report-row"><span>(7)</span><b>{t("report.noOfPages")}</b><span>{report.number_of_pages ?? "—"}</span></div>
+          <div className="report-row"><span>(8)</span><b>{t("report.surveyNo")}</b><span>{report.survey_cts_numbers?.join(", ") || "—"}</span></div>
+          <div className="report-row"><span>(9)</span><b>{t("report.tenureType")}</b><span>{report.tenure_and_area || "—"}</span></div>
+          <div className="report-row"><span>(10)</span><b>{t("report.area")}</b><span>{report.area ?? "—"}</span></div>
           <div className="report-row">
-            <span>(11)</span><b>Executant Details</b>
+            <span>(11)</span><b>{t("report.executants")}</b>
             <span>{report.executants?.length ? report.executants.map((p, i) => <div key={i}>{i + 1}) {fmtParty(p)}</div>) : "—"}</span>
           </div>
           <div className="report-row">
-            <span>(12)</span><b>Claimant Details</b>
+            <span>(12)</span><b>{t("report.claimants")}</b>
             <span>{report.claimants?.length ? report.claimants.map((p, i) => <div key={i}>{i + 1}) {fmtParty(p)}</div>) : "—"}</span>
           </div>
           <div className="report-row">
-            <span>(13)</span><b>Witness Details</b>
+            <span>(13)</span><b>{t("report.witnesses")}</b>
             <span>{report.witnesses?.length ? report.witnesses.map((p, i) => <div key={i}>{i + 1}) {fmtParty(p)}</div>) : "—"}</span>
           </div>
 
           <div className="report-note">
-            Any changes to be made — please use Previous. Once data entry is completed, take a printout of this
-            report or note down the Token Number. This data entry does not mean the document is accepted for
-            registration; the SRO officer has authority to reject or modify it per the applicable rules.
+            {t("report.note")}
           </div>
         </div>
 
         <div className="entry-actions">
-          <button type="button" className="btn btn-blue" onClick={() => navigate(`/entries/${id}/identifications`)}>Previous</button>
-          <button type="button" className="btn btn-outline" onClick={() => window.print()}>Print</button>
+          <button type="button" className="btn btn-blue" onClick={() => navigate(`/entries/${id}/identifications`)}>{t("common:previous")}</button>
+          <button type="button" className="btn btn-outline" onClick={() => window.print()}>{t("common:print")}</button>
           <button type="button" className="btn btn-green" onClick={handleNext} disabled={completing}>
-            {completing ? "Submitting…" : "Next"}
+            {completing ? t("report.submitting") : t("common:next")}
           </button>
         </div>
       </div>

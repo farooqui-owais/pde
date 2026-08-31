@@ -19,3 +19,40 @@
 .status-open { background: #eaf6ea; color: var(--green); }
 .status-submitted { background: #e8f0fb; color: var(--blue); }
 .status-cancelled { background: #fdecea; color: var(--red); }
+
+/* ---- full-width results table (screenshot has 17 columns, so it scrolls) ---- */
+.tok-table-wrap { margin-top: 22px; overflow-x: auto; border: 1px solid var(--hairline-strong); border-radius: 6px; }
+.tok-table-wrap .tok-table { margin-top: 0; min-width: 1400px; }
+.tok-table-wrap .tok-table th { background: #6b6b6b; color: #fff; white-space: normal; vertical-align: bottom; font-size: 11px; padding: 8px; }
+.tok-table-wrap .tok-table td { white-space: nowrap; }
+.tok-table-wrap .tok-table tbody tr:nth-child(odd) { background: #fbfbe8; }
+.tok-col-disabled { color: #aaa; }
+.tok-disabled-text { color: #aaa; }
+.tok-link-btn { background: none; border: none; color: var(--blue); cursor: pointer; padding: 0; font-size: 13px; text-decoration: underline; }
+.tok-link-btn:hover { color: var(--green); }
+
+/* ---- View / Edit Token Details modals (same family as Dashboard's modal) ---- */
+.tok-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+.tok-modal {
+  position: relative; background: #fff; border: 1px solid var(--green);
+  border-radius: 10px; padding: 26px 34px 30px; width: 92%; max-width: 560px;
+  max-height: 85vh; overflow-y: auto;
+}
+.tok-modal-close {
+  position: absolute; top: 12px; right: 16px; background: none; border: none;
+  color: var(--red); font-size: 16px; cursor: pointer;
+}
+.tok-modal-title { text-align: center; color: var(--green); font-size: 18px; margin: 0 0 4px; }
+.tok-modal-divider { height: 1px; background: var(--hairline-strong); margin: 14px 0; }
+.tok-modal-row { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; max-width: 420px; margin: 0 auto 16px; }
+.tok-modal-row label { font-weight: 600; font-size: 13.5px; }
+.tok-modal-row input, .tok-modal-row select { border: 1px solid var(--hairline-strong); border-radius: var(--radius); padding: 8px 10px; }
+.tok-modal-actions { text-align: center; }
+
+.tok-view-list { display: grid; grid-template-columns: 160px 1fr; row-gap: 10px; column-gap: 14px; font-size: 13.5px; margin: 0; }
+.tok-view-list dt { font-weight: 700; color: #555; }
+.tok-view-list dd { margin: 0; }
+.tok-view-subhead { color: var(--green); font-size: 14px; margin: 0 0 10px; }

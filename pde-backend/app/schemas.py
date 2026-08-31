@@ -188,10 +188,31 @@ class TokenEntryOut(BaseModel):
     token_number: str
     language: str
     district_id: Optional[int] = None
+    district_name: Optional[str] = None
     office_id: Optional[int] = None
+    office_name: Optional[str] = None
     presenter_name: Optional[str] = None
     status: str
     created_at: datetime
+
+    # Rolled up from the linked DocumentEntry (if the citizen has started
+    # filling one in) so the token list can show these without N extra
+    # requests per row.
+    entry_id: Optional[str] = None
+    entry_status: Optional[str] = None
+    is_draft: bool = False
+    party_count: int = 0
+    identifier_count: int = 0
+    property_count: int = 0
+
+
+class TokenEntryUpdate(BaseModel):
+    """Edit Token Details — token-level metadata only. Once a token has
+    moved past OPEN (submitted/cancelled) it's no longer editable."""
+    language: str = "Marathi"
+    district_id: Optional[int] = None
+    office_id: Optional[int] = None
+    presenter_name: Optional[str] = None
 
 
 class TokenFilter(BaseModel):

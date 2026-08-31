@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderTeal from "../components/HeaderTeal.jsx";
 import Footer from "../components/Footer.jsx";
@@ -19,6 +20,7 @@ function generateCaptcha() {
 const EMPTY = { old_password: "", new_password: "", confirm_password: "", captcha: "" };
 
 export default function ChangePassword() {
+  const { t } = useTranslation(["auth", "common"]);
   const navigate = useNavigate();
   const userRaw = localStorage.getItem("dn_user");
   const user = userRaw ? JSON.parse(userRaw) : null;
@@ -44,15 +46,15 @@ export default function ChangePassword() {
     setSuccess("");
 
     if (form.captcha.trim().toLowerCase() !== captcha.toLowerCase()) {
-      setError("Invalid CAPTCHA. Please match the text shown.");
+      setError(t("auth:invalidCaptcha"));
       return;
     }
     if (form.new_password !== form.confirm_password) {
-      setError("New password and confirm password do not match.");
+      setError(t("auth:passwordMismatch"));
       return;
     }
     if (form.new_password.length < 8) {
-      setError("New password must be at least 8 characters.");
+      setError(t("auth:passwordTooShort"));
       return;
     }
 
@@ -62,12 +64,12 @@ export default function ChangePassword() {
         old_password: form.old_password,
         new_password: form.new_password,
       });
-      setSuccess("Password changed successfully.");
+      setSuccess(t("auth:passwordChanged"));
       setForm(EMPTY);
       refreshCaptcha();
       setTimeout(() => navigate("/dashboard"), 1200);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not change password.");
+      setError(err?.response?.data?.detail || t("auth:couldNotChangePassword"));
     } finally {
       setLoading(false);
     }
