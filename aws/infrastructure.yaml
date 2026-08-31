@@ -92,7 +92,7 @@ Parameters:
     Description: CIDR allowed to SSH to the app server. Restrict to your IP (e.g. 1.2.3.4/32) for production.
   RepoUrl:
     Type: String
-    Default: https://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@github.com/farooqui-owais/pde.git
+    Default: https://github.com/farooqui-owais/pde.git
     Description: Git repo that contains pde-backend/ and pde-frontend/ folders.
   RepoBranch:
     Type: String
