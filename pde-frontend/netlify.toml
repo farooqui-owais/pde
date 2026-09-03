@@ -1,0 +1,28 @@
+# Netlify build + deploy config for the PDE frontend.
+
+# Build-time env.  Vite inlines this into the bundle, so set it to a same-origin
+# path ("/") — identical to the AWS /nginx setup (VITE_API_BASE_URL=/).
+# The SPA then calls /api/... on Netlify and Netlify proxies it to Render below.
+[build]
+  command  = "npm ci && npm run build"
+  publish  = "dist"
+
+[build.environment]
+  VITE_API_BASE_URL = "/"
+
+# Proxy API calls to your Render backend so the browser only talks to Netlify
+# (same-origin => no CORS, and CSRF/cookies behave like the AWS setup).
+# Replace REPLACE_WITH_YOUR_RENDER_URL with your actual Render URL, e.g.
+#   https://your-app.onrender.com
+# IMPORTANT: this rule must come BEFORE the SPA fallback rule below.
+[[redirects]]
+  from   = "/api/*"
+  to     = "https://pde-mmx9.onrender.com/api/:splat"
+  status = 200
+  force  = true
+
+# SPA fallback: serve index.html for client-side routes (register, login, ...).
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

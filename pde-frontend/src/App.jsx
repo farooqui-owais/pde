@@ -121,7 +121,7 @@ export default function App() {
         }
       />
       <Route
-        path="/tokens/:tokenId/presentation"
+        path="/tokens/:tokenId/presentation-details"
         element={
           <ProtectedRoute>
             <PresentationDetails />

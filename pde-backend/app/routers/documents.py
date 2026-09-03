@@ -11,6 +11,11 @@ from ..security import get_current_user
 
 def document_entry_out(entry: models.DocumentEntry) -> schemas.DocumentEntryOut:
     token = entry.token
+    office = token.office if token else None
+    district = token.district if token else None
+    dig_name = (office.dig_name if office and office.dig_name else None) or (district.name if district else None)
+    jdr_name = (office.jdr_name if office and office.jdr_name else None) or (district.name if district else None)
+    article = entry.article_type
     return schemas.DocumentEntryOut(
         id=entry.id,
         token_id=entry.token_id,
@@ -26,8 +31,16 @@ def document_entry_out(entry: models.DocumentEntry) -> schemas.DocumentEntryOut:
         number_of_pages=entry.number_of_pages,
         status=entry.status,
         token_number=token.token_number if token else None,
-        district_name=token.district.name if token and token.district else None,
-        office_name=token.office.name if token and token.office else None,
+        district_name=district.name if district else None,
+        office_name=office.name if office else None,
+        dig_name=dig_name,
+        jdr_name=jdr_name,
+        article_type_name=article.name if article else None,
+        article_type_description=(article.description if article and article.description else (article.name if article else None)),
+        presenter_type=entry.presenter_type,
+        valuation_text=entry.valuation_text,
+        no_valuation_reason=entry.no_valuation_reason,
+        document_executed_in=entry.document_executed_in,
     )
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -70,6 +83,8 @@ def create_entry(
         market_value=payload.market_value,
         consideration_amount=payload.consideration_amount,
         number_of_pages=payload.number_of_pages,
+        presenter_type=payload.presenter_type,
+        document_executed_in=payload.document_executed_in or "India",
     )
 
     if payload.market_value is not None and payload.consideration_amount is not None:
@@ -104,6 +119,9 @@ def update_entry(
     entry.market_value = payload.market_value
     entry.consideration_amount = payload.consideration_amount
     entry.number_of_pages = payload.number_of_pages
+    entry.presenter_type = payload.presenter_type
+    if payload.document_executed_in:
+        entry.document_executed_in = payload.document_executed_in
 
     if payload.market_value is not None and payload.consideration_amount is not None:
         base = max(payload.market_value, payload.consideration_amount)

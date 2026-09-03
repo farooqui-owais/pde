@@ -30,6 +30,12 @@ class RegistrationOffice(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(150), nullable=False)
     district_id = Column(Integer, ForeignKey("districts.id"), nullable=False)
+    # Administrative hierarchy above the SRO office (screenshots show these on
+    # entry-workflow footer strips / /frmTokenDetails: "DIG Name"/"JDR Name").
+    # Not in the manual; TBD authoritative source — falls back to the
+    # district name at read time when unset (see routers/documents.py).
+    dig_name = Column(String(150), nullable=True)
+    jdr_name = Column(String(150), nullable=True)
 
     district = relationship("District", back_populates="offices")
 
@@ -138,6 +144,10 @@ class ArticleType(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String(10), nullable=False)
     name = Column(String(150), nullable=False)
+    # Real portal shows a separate "Article Description" column alongside
+    # "Article Name" (screenshots: /frmTokenDetails). Not in the manual;
+    # nullable, falls back to `name` when unset (see routers/tokens.py).
+    description = Column(String(255), nullable=True)
     # Lease / Leave & License articles trigger the "Rent & Other Terms" step.
     has_rent_terms = Column(Boolean, default=False)
 
@@ -236,6 +246,14 @@ class DocumentEntry(Base):
     stamp_duty_paid = Column(Numeric(14, 2), nullable=True)
     stamp_duty_difference = Column(Numeric(14, 2), nullable=True)
     number_of_pages = Column(Integer, nullable=True)
+
+    # Real-portal "Presentation Details" view fields (screenshots:
+    # /frmTokenDetails) — none described by the manual, all TBD/free-form
+    # until an authoritative field list is confirmed:
+    presenter_type = Column(String(60), nullable=True)  # e.g. "Purchaser/Buyer/Executor"
+    valuation_text = Column(String(255), nullable=True)  # selected stamp-duty tree node label
+    no_valuation_reason = Column(Text, nullable=True)  # reason given when no valuation tree node applies
+    document_executed_in = Column(String(60), nullable=True, default="India")  # "India" / "Outside India"
 
     status = Column(String(20), default="DRAFT")  # DRAFT / SUBMITTED
     created_at = Column(DateTime, default=datetime.utcnow)

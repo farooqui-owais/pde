@@ -234,6 +234,7 @@ class ArticleTypeOut(BaseModel):
     id: int
     code: str
     name: str
+    description: Optional[str] = None
     has_rent_terms: bool = False
 
 
@@ -334,6 +335,8 @@ class DocumentEntryCreate(BaseModel):
     market_value: Decimal
     consideration_amount: Decimal
     number_of_pages: Optional[int] = Field(default=None, ge=1)
+    presenter_type: Optional[str] = None
+    document_executed_in: Optional[str] = "India"
 
     @field_validator("market_value", "consideration_amount")
     @classmethod
@@ -366,6 +369,14 @@ class DocumentEntryOut(BaseModel):
     token_number: Optional[str] = None
     district_name: Optional[str] = None
     office_name: Optional[str] = None
+    dig_name: Optional[str] = None
+    jdr_name: Optional[str] = None
+    article_type_name: Optional[str] = None
+    article_type_description: Optional[str] = None
+    presenter_type: Optional[str] = None
+    valuation_text: Optional[str] = None
+    no_valuation_reason: Optional[str] = None
+    document_executed_in: Optional[str] = None
 
 
 class StampDutyCalcRequest(BaseModel):

@@ -7,7 +7,6 @@ load_dotenv()
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    # (use DATABASE_URL env var; example: postgresql://<user>:<pass>@<host>/<db>)
     "postgresql://postgres:postgres@localhost:5432/pde",
 )
 

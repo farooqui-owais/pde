@@ -235,7 +235,7 @@ export default function DocumentEntry() {
 
             <label>{t("document.stampDutyPaid")}</label>
             <input readOnly value={stampDuty ? `\u20b9 ${stampDuty.stamp_duty}` : ""} />
-            <button type="button" className="btn btn-blue" onClick={openStampDetails}>{t("document.stampDutyPayDetails")}</button>
+            <button type="button" className="btn btn-outline" onClick={openStampDetails}>{t("document.stampDutyPayDetails")}</button>
             <span />
 
             <label>{t("document.stampDutyDifference")}</label>

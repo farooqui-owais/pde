@@ -1,0 +1,30 @@
+# Netlify build + deploy config for the PDE application.
+# The SPA lives in pde-frontend; the backend is hosted separately (Render) and
+# proxied under the same origin so the browser only talks to Netlify
+# (no CORS; CSRF cookies behave exactly like the AWS/nginx production setup).
+
+[build]
+  base    = "pde-frontend"
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+# Build-time env. Vite inlines this into the bundle. A same-origin path ("/")
+# means the SPA calls /api/... on Netlify, which is proxied by the redirect
+# below — identical to VITE_API_BASE_URL=/ used by the AWS/CI deploys.
+[build.environment]
+  VITE_API_BASE_URL = "/"
+
+# Proxy API calls to the hosted backend. IMPORTANT: this rule must appear
+# BEFORE the SPA fallback rule so /api/* is not swallowed by index.html.
+[[redirects]]
+  from   = "/api/*"
+  to     = "https://pde-mmx9.onrender.com/api/:splat"
+  status = 200
+  force  = true
+
+# SPA fallback: serve index.html for client-side routes (/, /login, /register,
+# /entries/:id/properties, ...).
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

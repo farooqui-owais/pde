@@ -5,91 +5,18 @@ import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
 import { formatApiValidationError, validatePropertyForm } from "../utils/validation.js";
+import {
+  ATTRIBUTE_TYPES,
+  AREA_UNITS,
+  ELECTRICITY_BOARDS,
+  HADD_NAMES,
+  HADD_TYPES,
+  MAHARASHTRA_DISTRICTS,
+  PROPERTY_TYPES,
+  getTalukasFor,
+  getVillagesFor,
+} from "../data/maharashtra.js";
 import "./PropertyDetails.css";
-
-const ATTRIBUTE_TYPES = [
-  "Survey Number",
-  "C.T.S. Number",
-  "Plot Number",
-  "Gat Number",
-  "Hissa Number",
-  "Milkat Number",
-];
-
-const AREA_UNITS = [
-  "Square Foot",
-  "Square Meter / चौ.मीटर",
-  "Acre / एकर",
-  "Hectare / हेक्टर",
-  "Guntha / गुंठा",
-];
-
-const HADD_TYPES = [
-  "Corporation / महानगरपालिका",
-  "Municipal Council / नगरपरिषद",
-  "Nagarpanchayat / नगरपंचायत",
-  "Cantonment / छावणी परिषद",
-  "Grampanchayat / ग्रामपंचायत",
-];
-
-const ELECTRICITY_BOARDS = [
-  "MSEDCL",
-  "Tata Power",
-  "Adani Electricity Mumbai",
-  "BEST Undertaking",
-  "Torrent Power",
-];
-
-const MAHARASHTRA_DISTRICTS = [
-  "Pune",
-  "Mumbai City",
-  "Mumbai Suburban",
-  "Thane",
-  "Nashik",
-  "Nagpur",
-  "Latur",
-  "Satara",
-  "Kolhapur",
-  "Solapur",
-  "Ahmednagar",
-  "Aurangabad (Chhatrapati Sambhaji Nagar)",
-  "Nanded",
-  "Amravati",
-  "Jalgaon",
-  "Raigad",
-  "Palghar",
-  "Ratnagiri",
-  "Sindhudurg",
-  "Sangli",
-  "Beed",
-  "Osmanabad (Dharashiv)",
-  "Parbhani",
-  "Jalna",
-  "Hingoli",
-  "Buldhana",
-  "Akola",
-  "Washim",
-  "Yavatmal",
-  "Wardha",
-  "Chandrapur",
-  "Gadchiroli",
-  "Bhandara",
-  "Gondia",
-  "Dhule",
-  "Nandurbar",
-];
-
-const PROPERTY_TYPES = [
-  "Flat / सदनिका",
-  "Plot / भूखंड",
-  "House / घर",
-  "Shop / दुकान",
-  "Office / कार्यालय",
-  "Godown / गोदाम",
-  "Industrial / औद्योगिक",
-  "Agricultural / शेतजमीन",
-  "Open Land / मोकळी जागा",
-];
 
 const BLANK_FORM = {
   district: "Pune",
@@ -147,6 +74,10 @@ export default function PropertyDetails() {
   const [discomModalOpen, setDiscomModalOpen] = useState(false);
   const [ulbModalOpen, setUlbModalOpen] = useState(false);
 
+  // Village dropdown: allow a free-form "Other / इतर" value in addition to the
+  // curated district/taluka list so valid villages never block saving.
+  const [villageCustom, setVillageCustom] = useState(false);
+
   async function loadData() {
     try {
       const [entryRes, propsRes] = await Promise.all([
@@ -171,10 +102,32 @@ export default function PropertyDetails() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  function handleDistrictChange(value) {
+    setForm((prev) => ({ ...prev, district: value, taluka: "", village_name: "" }));
+    setVillageCustom(false);
+  }
+
+  function handleTalukaChange(value) {
+    setForm((prev) => ({ ...prev, taluka: value, village_name: "" }));
+    setVillageCustom(false);
+  }
+
+  function handleVillageSelect(value) {
+    if (value === "__custom__") {
+      setVillageCustom(true);
+      setForm((prev) => ({ ...prev, village_name: "" }));
+    } else {
+      setVillageCustom(false);
+      setForm((prev) => ({ ...prev, village_name: value }));
+    }
+  }
+
   function handleSelectRow(prop) {
     setSelectedPropertyId(prop.id);
     const attr1 = prop.attributes?.[0] || {};
     const attr2 = prop.attributes?.[1] || {};
+    const villageOptions = getVillagesFor(prop.district || "", prop.taluka || "");
+    setVillageCustom(!villageOptions.includes(prop.village_name));
 
     setForm({
       district: prop.district || "Pune",
@@ -219,6 +172,7 @@ export default function PropertyDetails() {
   function handleCancelEdit() {
     setSelectedPropertyId(null);
     setForm(BLANK_FORM);
+    setVillageCustom(false);
     setPuiStatus(null);
     setError("");
   }
@@ -326,6 +280,7 @@ export default function PropertyDetails() {
   const tokenNumber = entry?.token?.token_number || "72959260825";
   const districtName = form.district || entry?.token?.district?.name || "Pune";
   const sroName = entry?.token?.office?.name || "Joint S.R. Haveli 21";
+  const villageOptions = getVillagesFor(form.district, form.taluka);
 
   return (
     <div className="page-shell">
@@ -357,7 +312,7 @@ export default function PropertyDetails() {
               <select
                 className="pde-select"
                 value={form.district}
-                onChange={(e) => update("district", e.target.value)}
+                onChange={(e) => handleDistrictChange(e.target.value)}
               >
                 {MAHARASHTRA_DISTRICTS.map((d) => (
                   <option key={d} value={d}>
@@ -372,36 +327,54 @@ export default function PropertyDetails() {
               <select
                 className="pde-select"
                 value={form.taluka}
-                onChange={(e) => update("taluka", e.target.value)}
+                onChange={(e) => handleTalukaChange(e.target.value)}
               >
                 <option value="">--Select Taluka--</option>
-                <option value="Haveli / हवेली">Haveli / हवेली</option>
-                <option value="Pune City / पुणे शहर">Pune City / पुणे शहर</option>
-                <option value="Mulshi / मुळशी">Mulshi / मुळशी</option>
-                <option value="Maval / मावळ">Maval / मावळ</option>
-                <option value="Bhor / भोर">Bhor / भोर</option>
-                <option value="Velhe / वेल्हे">Velhe / वेल्हे</option>
-                <option value="Purandar / पुरंदर">Purandar / पुरंदर</option>
-                <option value="Baramati / बारामती">Baramati / बारामती</option>
-                <option value="Indapur / इंदापूर">Indapur / इंदापूर</option>
-                <option value="Daund / दौंड">Daund / दौंड</option>
-                <option value="Shirur / शिरूर">Shirur / शिरूर</option>
-                <option value="Junnar / जुन्नर">Junnar / जुन्नर</option>
-                <option value="Ambegaon / आंबेगाव">Ambegaon / आंबेगाव</option>
-                <option value="Khed / खेड">Khed / खेड</option>
+                {getTalukasFor(form.district).map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="pde-panel-row">
               <label>Village Name</label>
-              <select
-                className="pde-select"
-                value={form.village_name}
-                onChange={(e) => update("village_name", e.target.value)}
-              >
-                <option value="">Select Village</option>
-                <option value={form.village_name || ""}>{form.village_name || "Select Village"}</option>
-              </select>
+              {villageCustom || (form.village_name && !villageOptions.includes(form.village_name)) ? (
+                <div className="pde-village-custom">
+                  <input
+                    type="text"
+                    className="pde-input"
+                    placeholder="Type village name…"
+                    value={form.village_name}
+                    onChange={(e) => update("village_name", e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="pde-link-btn"
+                    onClick={() => {
+                      setVillageCustom(false);
+                      update("village_name", "");
+                    }}
+                  >
+                    Choose from list
+                  </button>
+                </div>
+              ) : (
+                <select
+                  className="pde-select"
+                  value={form.village_name}
+                  onChange={(e) => handleVillageSelect(e.target.value)}
+                >
+                  <option value="">Select Village</option>
+                  {villageOptions.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                  <option value="__custom__">Other / इतर (type it)</option>
+                </select>
+              )}
             </div>
 
             <div className="pde-panel-row">
@@ -573,8 +546,11 @@ export default function PropertyDetails() {
                 onChange={(e) => update("hadd_name", e.target.value)}
               >
                 <option value="">--Select Hadda Name--</option>
-                <option value="Pune M.N.Pa. / पुणे म.न.पा.">Pune M.N.Pa. / पुणे म.न.पा.</option>
-                <option value="PCMC / पिंपरी-चिंचवड म.न.पा.">PCMC / पिंपरी-चिंचवड म.न.पा.</option>
+                {HADD_NAMES.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
               </select>
             </div>
 

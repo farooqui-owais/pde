@@ -49,6 +49,14 @@ def _ensure_additive_columns():
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS seller_middle_name VARCHAR(80)",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS seller_last_name VARCHAR(80)",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS mobile_number_verified BOOLEAN DEFAULT FALSE",
+        # Presentation Details ("Token Details") view — screenshots: /frmTokenDetails
+        "ALTER TABLE article_types ADD COLUMN IF NOT EXISTS description VARCHAR(255)",
+        "ALTER TABLE document_entries ADD COLUMN IF NOT EXISTS presenter_type VARCHAR(60)",
+        "ALTER TABLE document_entries ADD COLUMN IF NOT EXISTS valuation_text VARCHAR(255)",
+        "ALTER TABLE document_entries ADD COLUMN IF NOT EXISTS no_valuation_reason TEXT",
+        "ALTER TABLE document_entries ADD COLUMN IF NOT EXISTS document_executed_in VARCHAR(60) DEFAULT 'India'",
+        "ALTER TABLE registration_offices ADD COLUMN IF NOT EXISTS dig_name VARCHAR(150)",
+        "ALTER TABLE registration_offices ADD COLUMN IF NOT EXISTS jdr_name VARCHAR(150)",
     ]
     dialect = engine.dialect.name
     with engine.begin() as conn:
@@ -87,6 +95,14 @@ def _ensure_additive_columns():
             add_col_sqlite("party_details", "seller_middle_name", "VARCHAR(80)")
             add_col_sqlite("party_details", "seller_last_name", "VARCHAR(80)")
             add_col_sqlite("party_details", "mobile_number_verified", "BOOLEAN DEFAULT 0")
+            # Presentation Details ("Token Details") view
+            add_col_sqlite("article_types", "description", "VARCHAR(255)")
+            add_col_sqlite("document_entries", "presenter_type", "VARCHAR(60)")
+            add_col_sqlite("document_entries", "valuation_text", "VARCHAR(255)")
+            add_col_sqlite("document_entries", "no_valuation_reason", "TEXT")
+            add_col_sqlite("document_entries", "document_executed_in", "VARCHAR(60) DEFAULT 'India'")
+            add_col_sqlite("registration_offices", "dig_name", "VARCHAR(150)")
+            add_col_sqlite("registration_offices", "jdr_name", "VARCHAR(150)")
 
 
 def _init_db(max_attempts=15, retry_delay=1.0):

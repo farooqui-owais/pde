@@ -23,10 +23,7 @@ export default function TokenInformation() {
   const [filters, setFilters] = useState({ start_date: "", end_date: "", presenter_name: "" });
   const [newToken, setNewToken] = useState({ language: "\u092e\u0930\u093e\u0920\u0940", district_id: "", office_id: "" });
 
-  // View Token Details modal
-  const [viewToken, setViewToken] = useState(null);
-  const [viewLoading, setViewLoading] = useState(false);
-  const [viewError, setViewError] = useState("");
+  // View Token Details
 
   // Edit Token Details modal
   const [editToken, setEditToken] = useState(null);
@@ -102,24 +99,10 @@ export default function TokenInformation() {
   }
 
   // ---- View Token Details ----
-  async function openView(tokenRow) {
-    setViewToken(tokenRow); // show modal immediately with what we already have
-    setViewError("");
-    setViewLoading(true);
-    try {
-      const { data } = await api.get(`/api/tokens/${tokenRow.id}`);
-      setViewToken(data);
-      patchTokenRow(data);
-    } catch (err) {
-      setViewError(err?.response?.data?.detail || t("token.couldNotLoadToken"));
-    } finally {
-      setViewLoading(false);
-    }
-  }
-
-  function closeView() {
-    setViewToken(null);
-    setViewError("");
+  // Per the real portal (/frmTokenDetails), "View" opens a full read-only
+  // Presentation Details page rather than a summary popup.
+  function openView(tokenRow) {
+    navigate(`/tokens/${tokenRow.id}/presentation-details`);
   }
 
   // ---- Edit Token Details ----
@@ -309,39 +292,6 @@ export default function TokenInformation() {
         )}
       </div>
       <Footer copyright="Copyright \u00A9 (2026) National Informatics Centre, Pune" />
-
-      {viewToken && (
-        <div className="tok-modal-overlay" onClick={closeView}>
-          <div className="tok-modal" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="tok-modal-close" onClick={closeView} aria-label="Close">&#10006;</button>
-            <h3 className="tok-modal-title">{t("token.viewModalTitle")}</h3>
-            <div className="tok-modal-divider" />
-            {viewError && <div className="banner banner-error">{viewError}</div>}
-            <dl className="tok-view-list">
-              <dt>{t("token.colToken")}</dt><dd className="mono">{viewToken.token_number}</dd>
-              <dt>{t("token.colPresenterName")}</dt><dd>{viewToken.presenter_name || "\u2014"}</dd>
-              <dt>{t("token.colLanguage")}</dt><dd>{viewToken.language}</dd>
-              <dt>{t("token.selectDistrict")}</dt><dd>{viewToken.district_name || "\u2014"}</dd>
-              <dt>{t("token.colOfficeName")}</dt><dd>{viewToken.office_name || "\u2014"}</dd>
-              <dt>{t("token.colStartDate")}</dt><dd>{fmtDate(viewToken.created_at)}</dd>
-              <dt>{t("token.colStatus")}</dt><dd><span className={`status-pill status-${viewToken.status.toLowerCase()}`}>{viewToken.status}</span></dd>
-            </dl>
-            <div className="tok-modal-divider" />
-            <h4 className="tok-view-subhead">{t("token.entrySummary")}</h4>
-            {viewToken.entry_id ? (
-              <dl className="tok-view-list">
-                <dt>{t("token.entryStatus")}</dt><dd>{viewToken.entry_status}</dd>
-                <dt>{t("token.colPartyCount")}</dt><dd>{viewToken.party_count}</dd>
-                <dt>{t("token.colIdentifierCount")}</dt><dd>{viewToken.identifier_count}</dd>
-                <dt>{t("token.colPropertyCount")}</dt><dd>{viewToken.property_count}</dd>
-              </dl>
-            ) : (
-              <div className="tok-filter-hint">{t("token.noEntryYet")}</div>
-            )}
-            {viewLoading && <div className="tok-filter-hint">{t("common:loading", "Loading\u2026")}</div>}
-          </div>
-        </div>
-      )}
 
       {editToken && editForm && (
         <div className="tok-modal-overlay" onClick={closeEdit}>

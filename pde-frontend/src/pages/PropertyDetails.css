@@ -452,3 +452,30 @@
   font-weight: 600;
   cursor: pointer;
 }
+/* Village custom-entry fallback (shown when "Other / इतर (type it)" is chosen
+   or an existing row has a village not present in the curated list). */
+.pde-village-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.pde-village-custom .pde-input {
+  flex: 1 1 auto;
+}
+
+.pde-link-btn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  padding: 0;
+}
+
+.pde-link-btn:hover {
+  color: #1d4ed8;
+}
