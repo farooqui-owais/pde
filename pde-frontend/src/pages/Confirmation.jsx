@@ -47,6 +47,11 @@ export default function Confirmation() {
             </table>
 
             <button type="button" className="btn btn-green" onClick={() => navigate("/tokens")}>{t("confirmation.complete")}</button>
+            <div style={{ marginTop: 14 }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); navigate(`/entries/${id}/execution`); }}>
+                {t("confirmation.optionalExecutionLink")}
+              </a>
+            </div>
           </div>
         )}
       </div>

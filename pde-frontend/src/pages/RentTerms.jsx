@@ -4,12 +4,13 @@ import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
+import { formatApiValidationError, validateRentTermsForm } from "../utils/validation.js";
 import "./RentTerms.css";
 
 const BLANK_SLABS = Array.from({ length: 5 }, () => ({ to_month: "", rent: "" }));
 
 export default function RentTerms() {
-  const { t } = useTranslation(["pages", "common"]);
+  const { t } = useTranslation(["pages", "common", "validation"]);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -30,6 +31,11 @@ export default function RentTerms() {
 
   async function handleSave() {
     setError("");
+    const validationError = validateRentTermsForm({ licensePeriod, fromDate, toDate, slabs });
+    if (validationError) {
+      setError(t(validationError));
+      return;
+    }
     setSaving(true);
     try {
       const rent_slabs = slabs
@@ -49,7 +55,7 @@ export default function RentTerms() {
       });
       navigate(`/entries/${id}/properties`);
     } catch (err) {
-      setError(err?.response?.data?.detail || t("rent.couldNotSave"));
+      setError(formatApiValidationError(err?.response?.data?.detail, t) || t("rent.couldNotSave"));
     } finally {
       setSaving(false);
     }

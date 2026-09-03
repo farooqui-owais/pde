@@ -10,12 +10,23 @@ The router provides:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+import random
+import string
 
 from ..database import get_db
 from .. import models_pde, schemas_pde
 from ..security import hash_password, verify_password
 
 router = APIRouter(prefix="/api/v1/pde", tags=["PDE"])
+
+
+def _generate_pde_token_number(db: Session) -> str:
+    for _ in range(25):
+        number = random.choice("123456789") + "".join(random.choices(string.digits, k=10))
+        exists = db.query(models_pde.PDENetworkToken).filter(models_pde.PDENetworkToken.token_number == number).first()
+        if not exists:
+            return number
+    raise HTTPException(status_code=500, detail="Could not allocate a unique token number")
 
 # ---------------------------------------------------------------------------
 # Helper dependencies

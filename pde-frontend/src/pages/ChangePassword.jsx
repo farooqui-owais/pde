@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderTeal from "../components/HeaderTeal.jsx";
 import Footer from "../components/Footer.jsx";
+import { formatApiValidationError, validatePassword, validatePasswordMatch } from "../utils/validation.js";
 import "./ChangePassword.css";
 
 const CAPTCHA_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -20,7 +21,7 @@ function generateCaptcha() {
 const EMPTY = { old_password: "", new_password: "", confirm_password: "", captcha: "" };
 
 export default function ChangePassword() {
-  const { t } = useTranslation(["auth", "common"]);
+  const { t } = useTranslation(["auth", "common", "validation"]);
   const navigate = useNavigate();
   const userRaw = localStorage.getItem("dn_user");
   const user = userRaw ? JSON.parse(userRaw) : null;
@@ -49,14 +50,10 @@ export default function ChangePassword() {
       setError(t("auth:invalidCaptcha"));
       return;
     }
-    if (form.new_password !== form.confirm_password) {
-      setError(t("auth:passwordMismatch"));
-      return;
-    }
-    if (form.new_password.length < 8) {
-      setError(t("auth:passwordTooShort"));
-      return;
-    }
+    const pwdError = validatePassword(form.new_password);
+    if (pwdError) { setError(t(pwdError)); return; }
+    const matchError = validatePasswordMatch(form.new_password, form.confirm_password);
+    if (matchError) { setError(t(matchError)); return; }
 
     setLoading(true);
     try {
@@ -69,7 +66,7 @@ export default function ChangePassword() {
       refreshCaptcha();
       setTimeout(() => navigate("/dashboard"), 1200);
     } catch (err) {
-      setError(err?.response?.data?.detail || t("auth:couldNotChangePassword"));
+      setError(formatApiValidationError(err?.response?.data?.detail, t) || t("auth:couldNotChangePassword"));
     } finally {
       setLoading(false);
     }

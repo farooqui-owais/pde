@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
+import { formatApiValidationError, validateProfileForm } from "../utils/validation.js";
 import HeaderTeal from "../components/HeaderTeal.jsx";
 import Footer from "../components/Footer.jsx";
 import "./Register.css";
@@ -13,6 +15,7 @@ const FIELDS = [
 ];
 
 export default function UpdateProfile() {
+  const { t } = useTranslation(["validation"]);
   const navigate = useNavigate();
 
   // A direct visit without going through the Dashboard "Update Profile" ->
@@ -43,6 +46,11 @@ export default function UpdateProfile() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError(""); setSuccess("");
+    const validationError = validateProfileForm(form);
+    if (validationError) {
+      setError(t(validationError));
+      return;
+    }
     setLoading(true);
     try {
       await api.put("/api/auth/me", form);
@@ -50,7 +58,7 @@ export default function UpdateProfile() {
       sessionStorage.removeItem("dn_profile_unlock");
       setTimeout(() => navigate("/dashboard"), 1200);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not update profile.");
+      setError(formatApiValidationError(err?.response?.data?.detail, t) || "Could not update profile.");
     } finally {
       setLoading(false);
     }

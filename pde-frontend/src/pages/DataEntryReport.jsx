@@ -4,10 +4,11 @@ import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
+import { formatApiValidationError } from "../utils/validation.js";
 import "./EntrySteps.css";
 
 export default function DataEntryReport() {
-  const { t } = useTranslation(["pages", "common"]);
+  const { t } = useTranslation(["pages", "common", "validation"]);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -28,7 +29,7 @@ export default function DataEntryReport() {
       await api.post(`/api/documents/${id}/complete`);
       navigate(`/entries/${id}/confirmation`);
     } catch (err) {
-      setError(err?.response?.data?.detail || t("report.couldNotComplete"));
+      setError(formatApiValidationError(err?.response?.data?.detail, t) || t("report.couldNotComplete"));
     } finally {
       setCompleting(false);
     }

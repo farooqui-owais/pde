@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderTeal from "../components/HeaderTeal.jsx";
 import Footer from "../components/Footer.jsx";
+import {
+  formatApiValidationError,
+  validateForgotPasswordResetForm,
+  validateForgotPasswordVerifyForm,
+} from "../utils/validation.js";
 import "./ForgotPassword.css";
 
 const CAPTCHA_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -17,6 +23,7 @@ function generateCaptcha() {
 }
 
 export default function ForgotPassword() {
+  const { t } = useTranslation(["validation"]);
   const navigate = useNavigate();
 
   // step 1: identity / security-question verification
@@ -47,6 +54,8 @@ export default function ForgotPassword() {
       setError("Invalid CAPTCHA. Please match the text shown.");
       return;
     }
+    const validationError = validateForgotPasswordVerifyForm(form);
+    if (validationError) { setError(t(validationError)); return; }
 
     setLoading(true);
     try {
@@ -57,7 +66,7 @@ export default function ForgotPassword() {
       });
       setResetToken(data.reset_token);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not verify your details.");
+      setError(formatApiValidationError(err?.response?.data?.detail, t) || "Could not verify your details.");
       refreshCaptcha();
     } finally {
       setLoading(false);
@@ -67,15 +76,8 @@ export default function ForgotPassword() {
   async function handleReset(e) {
     e.preventDefault();
     setError("");
-
-    if (pwForm.new_password !== pwForm.confirm_password) {
-      setError("New password and confirm password do not match.");
-      return;
-    }
-    if (pwForm.new_password.length < 8) {
-      setError("New password must be at least 8 characters.");
-      return;
-    }
+    const validationError = validateForgotPasswordResetForm(pwForm);
+    if (validationError) { setError(t(validationError)); return; }
 
     setLoading(true);
     try {

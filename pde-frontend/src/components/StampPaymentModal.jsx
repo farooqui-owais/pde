@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
+import { validateStampPaymentForm } from "../utils/validation.js";
 import "./StampPaymentModal.css";
 
 const PAID_BY_OPTIONS = [
@@ -15,6 +17,7 @@ const todayDdmmyyyy = new Date().toLocaleDateString("en-GB");
 const todayIso = new Date().toISOString().slice(0, 10);
 
 export default function StampPaymentModal({ documentEntryId, defaultAmount, onClose }) {
+  const { t } = useTranslation(["validation"]);
   const [paidBy, setPaidBy] = useState("Franking");
   const [form, setForm] = useState({
     franking_mc_no: "",
@@ -24,6 +27,7 @@ export default function StampPaymentModal({ documentEntryId, defaultAmount, onCl
     amount: defaultAmount || "",
     licence_no: "",
     serial_no: "",
+    stationery_number: "",
   });
   const [payments, setPayments] = useState([]);
   const [error, setError] = useState("");
@@ -49,7 +53,8 @@ export default function StampPaymentModal({ documentEntryId, defaultAmount, onCl
 
   async function handleSave() {
     setError("");
-    if (!form.amount) { setError("Amount is required."); return; }
+    const validationError = validateStampPaymentForm(form);
+    if (validationError) { setError(t(validationError)); return; }
     setSaving(true);
     try {
       const payload = {
@@ -60,12 +65,13 @@ export default function StampPaymentModal({ documentEntryId, defaultAmount, onCl
         franking_mc_no: paidBy === "Franking" ? form.franking_mc_no : null,
         franking_serial_no: paidBy === "Franking" ? form.franking_serial_no : null,
         licence_no: paidBy !== "Franking" ? form.licence_no : null,
-        serial_no: paidBy !== "Franking" ? form.serial_no : null,
-        vendors_name: form.vendors_name || null,
+        serial_no: ["Stamp Paper", "Certificate"].includes(paidBy) ? form.serial_no : null,
+        vendors_name: ["Franking", "Stamp Paper", "Certificate"].includes(paidBy) ? form.vendors_name : null,
+        stationery_number: paidBy === "e-SBTR" ? form.stationery_number : null,
       };
       await api.post("/api/stamp/payments", payload);
       await loadPayments();
-      setForm((f) => ({ ...f, franking_serial_no: "", licence_no: "", serial_no: "", amount: "" }));
+      setForm((f) => ({ ...f, franking_serial_no: "", licence_no: "", serial_no: "", amount: "", stationery_number: "" }));
     } catch (err) {
       setError(err?.response?.data?.detail || "Could not save this stamp payment.");
     } finally {
@@ -73,16 +79,123 @@ export default function StampPaymentModal({ documentEntryId, defaultAmount, onCl
     }
   }
 
-  async function handleDelete(id) {
-    try {
-      await api.delete(`/api/stamp/payments/${id}`);
-      await loadPayments();
-    } catch {
-      /* keep silent, table just won't refresh */
+  function renderFields() {
+    switch (paidBy) {
+      case "Franking":
+        return (
+          <>
+            <label>Franking M/C No.</label>
+            <input value={form.franking_mc_no || ""} onChange={(e) => update("franking_mc_no", e.target.value)} />
+            <span /><span />
+
+            <label>Vendor's Name</label>
+            <input value={form.vendors_name || ""} disabled />
+            <span /><span />
+
+            <label>Franking Serial No.</label>
+            <input value={form.franking_serial_no || ""} onChange={(e) => update("franking_serial_no", e.target.value)} />
+            <span className="stamp-multi-note">Multiple Franking / Mudrank, Separated.</span><span />
+
+            <label>Franking Date</label>
+            <input type="date" value={form.payment_date || ""} onChange={(e) => update("payment_date", e.target.value)} />
+            <span /><span />
+
+            <label>Franking Amount</label>
+            <input value={form.amount} onChange={(e) => update("amount", e.target.value)} />
+            <span /><span />
+          </>
+        );
+      case "e-Stamp":
+        return (
+          <>
+            <label>ACC No.</label>
+            <input value={form.licence_no || ""} onChange={(e) => update("licence_no", e.target.value)} />
+            <span /><span />
+
+            <label>eStamp Amount</label>
+            <input value={form.amount} onChange={(e) => update("amount", e.target.value)} />
+            <span /><span />
+          </>
+        );
+      case "e-SBTR":
+        return (
+          <>
+            <label>eSBTR (GRN) No.</label>
+            <input value={form.licence_no || ""} onChange={(e) => update("licence_no", e.target.value)} />
+            <span /><span />
+
+            <label>eSBTR Amount</label>
+            <input value={form.amount} onChange={(e) => update("amount", e.target.value)} />
+            <span /><span />
+
+            <label>Stationary Number</label>
+            <input value={form.stationery_number || ""} onChange={(e) => update("stationery_number", e.target.value)} />
+            <span /><span />
+          </>
+        );
+      case "e-Challan":
+        return (
+          <>
+            <label>GRN No.</label>
+            <input value={form.licence_no || ""} onChange={(e) => update("licence_no", e.target.value)} />
+            <span /><span />
+
+            <label>GRN Amount</label>
+            <input value={form.amount} onChange={(e) => update("amount", e.target.value)} />
+            <span /><span />
+          </>
+        );
+      case "Certificate":
+        return (
+          <>
+            <label>Collector of Stamps Number</label>
+            <input value={form.licence_no || ""} onChange={(e) => update("licence_no", e.target.value)} />
+            <span /><span />
+
+            <label>Collector of Stamps</label>
+            <input value={form.vendors_name || ""} disabled />
+            <span /><span />
+
+            <label>Certificate Number</label>
+            <input value={form.serial_no || ""} onChange={(e) => update("serial_no", e.target.value)} />
+            <span /><span />
+
+            <label>Certificate Date</label>
+            <input type="date" value={form.payment_date || ""} onChange={(e) => update("payment_date", e.target.value)} />
+            <span /><span />
+
+            <label>Certificate Amount</label>
+            <input value={form.amount} onChange={(e) => update("amount", e.target.value)} />
+            <span /><span />
+          </>
+        );
+      case "Stamp Paper":
+      default:
+        return (
+          <>
+            <label>Licence No.</label>
+            <input value={form.licence_no || ""} onChange={(e) => update("licence_no", e.target.value)} />
+            <span /><span />
+
+            <label>Vendor's Name</label>
+            <input value={form.vendors_name || ""} disabled />
+            <span /><span />
+
+            <label>Serial No.</label>
+            <input value={form.serial_no || ""} onChange={(e) => update("serial_no", e.target.value)} />
+            <span className="stamp-multi-note">Multiple Franking / Mudrank, Separated.</span><span />
+
+            <label>Mudrank Date</label>
+            <input type="date" value={form.payment_date || ""} onChange={(e) => update("payment_date", e.target.value)} />
+            <span /><span />
+
+            <label>Mudrank Amount</label>
+            <input value={form.amount} onChange={(e) => update("amount", e.target.value)} />
+            <span /><span />
+          </>
+        );
     }
   }
-
-  const isFranking = paidBy === "Franking";
 
   return (
     <div className="stamp-modal-backdrop" onClick={onClose}>
@@ -101,51 +214,7 @@ export default function StampPaymentModal({ documentEntryId, defaultAmount, onCl
             <label>Stamp Duty</label>
             <input value={form.amount} onChange={(e) => update("amount", e.target.value)} />
 
-            {isFranking ? (
-              <>
-                <label>Franking M/C No.</label>
-                <input value={form.franking_mc_no} onChange={(e) => update("franking_mc_no", e.target.value)} />
-                <span className="stamp-multi-note">Multiple Franking / Mudrank, Separated.</span>
-
-                <label>Vendor's Name</label>
-                <input value={form.vendors_name} disabled />
-                <span /><span />
-
-                <label>Franking Serial No.</label>
-                <input value={form.franking_serial_no} onChange={(e) => update("franking_serial_no", e.target.value)} />
-                <span /><span />
-
-                <label>Franking Date</label>
-                <input type="date" value={form.payment_date} onChange={(e) => update("payment_date", e.target.value)} />
-                <span /><span />
-
-                <label>Franking Amount</label>
-                <input value={form.amount} onChange={(e) => update("amount", e.target.value)} />
-                <span /><span />
-              </>
-            ) : (
-              <>
-                <label>Licence No.</label>
-                <input value={form.licence_no} onChange={(e) => update("licence_no", e.target.value)} />
-                <span className="stamp-multi-note">Multiple Franking / Mudrank, Separated.</span>
-
-                <label>Vendor's Name</label>
-                <input value={form.vendors_name} disabled />
-                <span /><span />
-
-                <label>Serial No.</label>
-                <input value={form.serial_no} onChange={(e) => update("serial_no", e.target.value)} />
-                <span /><span />
-
-                <label>Mudrank Date</label>
-                <input type="date" value={form.payment_date} onChange={(e) => update("payment_date", e.target.value)} />
-                <span /><span />
-
-                <label>Mudrank Amount</label>
-                <input value={form.amount} onChange={(e) => update("amount", e.target.value)} />
-                <span /><span />
-              </>
-            )}
+            {renderFields()}
           </div>
 
           <div className="stamp-modal-actions">

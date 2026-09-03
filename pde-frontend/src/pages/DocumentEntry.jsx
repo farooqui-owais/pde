@@ -5,12 +5,13 @@ import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
 import StampPaymentModal from "../components/StampPaymentModal.jsx";
+import { formatApiValidationError, validateDocumentEntryForm } from "../utils/validation.js";
 import "./DocumentEntry.css";
 
 const todayIso = new Date().toISOString().slice(0, 10);
 
 export default function DocumentEntry() {
-  const { t } = useTranslation(["pages", "common"]);
+  const { t } = useTranslation(["pages", "common", "validation"]);
   const { state } = useLocation();
   const navigate = useNavigate();
 
@@ -34,6 +35,28 @@ export default function DocumentEntry() {
     number_of_pages: "",
   });
   const [stampDuty, setStampDuty] = useState(null);
+
+  useEffect(() => {
+    if (entryId) {
+      api.get(`/api/documents/${entryId}`)
+        .then((r) => {
+          const d = r.data;
+          setForm({
+            article_type_id: d.article_type_id || "",
+            document_title: d.document_title || "",
+            date_of_execution: d.date_of_execution ? d.date_of_execution.slice(0, 10) : todayIso,
+            date_of_presentation: d.date_of_presentation ? d.date_of_presentation.slice(0, 10) : todayIso,
+            market_value: d.market_value || "",
+            consideration_amount: d.consideration_amount || "",
+            number_of_pages: d.number_of_pages || "",
+          });
+          if (d.stamp_duty) {
+             setStampDuty({ stamp_duty: d.stamp_duty });
+          }
+        })
+        .catch(() => setError("Could not load existing entry data"));
+    }
+  }, [entryId]);
 
   useEffect(() => {
     api.get("/api/reference/article-types").then((r) => setArticleTypes(r.data)).catch(() => {});
@@ -122,6 +145,8 @@ export default function DocumentEntry() {
     e.preventDefault();
     setError(""); setSuccess("");
     if (!tokenId) { setError(t("document.noEntryToken")); return; }
+    const validationError = validateDocumentEntryForm(form);
+    if (validationError) { setError(t(validationError)); return; }
     setSaving(true);
     try {
       const id = await ensureEntrySaved();
@@ -132,7 +157,7 @@ export default function DocumentEntry() {
         navigate(`/entries/${id}/properties`);
       }
     } catch (err) {
-      setError(err?.response?.data?.detail || t("document.couldNotSave"));
+      setError(formatApiValidationError(err?.response?.data?.detail, t) || t("document.couldNotSave"));
     } finally {
       setSaving(false);
     }
@@ -179,22 +204,22 @@ export default function DocumentEntry() {
             </select>
 
             <label>{t("document.dateOfExecution")}</label>
-            <input type="date" value={form.date_of_execution} onChange={(e) => update("date_of_execution", e.target.value)} />
+            <input type="date" value={form.date_of_execution} onChange={(e) => update("date_of_execution", e.target.value)} required />
             <span />
             <span />
 
             <label>{t("document.dateOfPresentation")}</label>
-            <input type="date" value={form.date_of_presentation} onChange={(e) => update("date_of_presentation", e.target.value)} />
+            <input type="date" value={form.date_of_presentation} onChange={(e) => update("date_of_presentation", e.target.value)} required />
             <span />
             <span />
 
             <label>{t("document.marketValue")}</label>
-            <input type="number" min="0" value={form.market_value} onChange={(e) => update("market_value", e.target.value)} onBlur={calculateStampDuty} />
+            <input type="number" min="0" value={form.market_value} onChange={(e) => update("market_value", e.target.value)} onBlur={calculateStampDuty} required />
             <span />
             <span />
 
             <label>{t("document.considerationAmount")}</label>
-            <input type="number" min="0" value={form.consideration_amount} onChange={(e) => update("consideration_amount", e.target.value)} onBlur={calculateStampDuty} />
+            <input type="number" min="0" value={form.consideration_amount} onChange={(e) => update("consideration_amount", e.target.value)} onBlur={calculateStampDuty} required />
             <span />
             <span />
 
@@ -210,7 +235,7 @@ export default function DocumentEntry() {
 
             <label>{t("document.stampDutyPaid")}</label>
             <input readOnly value={stampDuty ? `\u20b9 ${stampDuty.stamp_duty}` : ""} />
-            <button type="button" className="btn btn-outline" onClick={openStampDetails}>{t("document.stampDutyPayDetails")}</button>
+            <button type="button" className="btn btn-blue" onClick={openStampDetails}>{t("document.stampDutyPayDetails")}</button>
             <span />
 
             <label>{t("document.stampDutyDifference")}</label>

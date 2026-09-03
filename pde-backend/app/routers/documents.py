@@ -8,6 +8,28 @@ from .. import models, schemas
 from ..database import get_db
 from ..security import get_current_user
 
+
+def document_entry_out(entry: models.DocumentEntry) -> schemas.DocumentEntryOut:
+    token = entry.token
+    return schemas.DocumentEntryOut(
+        id=entry.id,
+        token_id=entry.token_id,
+        article_type_id=entry.article_type_id,
+        document_title=entry.document_title,
+        date_of_execution=entry.date_of_execution,
+        date_of_presentation=entry.date_of_presentation,
+        market_value=entry.market_value,
+        consideration_amount=entry.consideration_amount,
+        stamp_duty=entry.stamp_duty,
+        stamp_duty_paid=entry.stamp_duty_paid,
+        stamp_duty_difference=entry.stamp_duty_difference,
+        number_of_pages=entry.number_of_pages,
+        status=entry.status,
+        token_number=token.token_number if token else None,
+        district_name=token.district.name if token and token.district else None,
+        office_name=token.office.name if token and token.office else None,
+    )
+
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
@@ -57,7 +79,7 @@ def create_entry(
     db.add(entry)
     db.commit()
     db.refresh(entry)
-    return entry
+    return document_entry_out(entry)
 
 
 @router.put("/{entry_id}", response_model=schemas.DocumentEntryOut)
@@ -89,7 +111,7 @@ def update_entry(
 
     db.commit()
     db.refresh(entry)
-    return entry
+    return document_entry_out(entry)
 
 
 @router.get("", response_model=List[schemas.DocumentEntryOut])
@@ -98,10 +120,12 @@ def list_entries(
     current_user: models.User = Depends(get_current_user),
 ):
     return (
-        db.query(models.DocumentEntry)
-        .filter(models.DocumentEntry.user_id == current_user.id)
-        .order_by(models.DocumentEntry.created_at.desc())
-        .all()
+        [document_entry_out(e) for e in (
+            db.query(models.DocumentEntry)
+            .filter(models.DocumentEntry.user_id == current_user.id)
+            .order_by(models.DocumentEntry.created_at.desc())
+            .all()
+        )]
     )
 
 
@@ -118,4 +142,4 @@ def get_entry(
     )
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
-    return entry
+    return document_entry_out(entry)

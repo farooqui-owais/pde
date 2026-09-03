@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..entry_validation import validate_entry_ready_for_completion
 from ..security import get_current_user
 
 router = APIRouter(prefix="/api/documents", tags=["entry-details"])
@@ -38,10 +39,13 @@ def _entry_or_404(db: Session, entry_id: str, user: models.User) -> models.Docum
 # ---------------------------------------------------------------------------
 
 def _attrs_to_json(attrs) -> str:
-    return json.dumps([a.model_dump() for a in attrs])
+    cleaned = [a.model_dump() if hasattr(a, "model_dump") else a for a in attrs]
+    return json.dumps(cleaned)
 
 
 def _property_out(p: models.PropertyDetail) -> schemas.PropertyDetailOut:
+    raw_attrs = json.loads(p.attributes or "[]")
+    parsed_attrs = [schemas.PropertyAttribute(**a) for a in raw_attrs]
     return schemas.PropertyDetailOut(
         id=p.id,
         document_entry_id=p.document_entry_id,
@@ -52,15 +56,28 @@ def _property_out(p: models.PropertyDetail) -> schemas.PropertyDetailOut:
         hadd_name=p.hadd_name,
         taluka=p.taluka,
         zp=p.zp,
-        attributes=[schemas.PropertyAttribute(**a) for a in json.loads(p.attributes or "[]")],
+        attributes=parsed_attrs,
         area=p.area,
         area_unit=p.area_unit,
         property_type=p.property_type,
         pui_number=p.pui_number,
         pui_verified=p.pui_verified,
+        address_type=p.address_type,
+        flat_no_en=p.flat_no_en,
+        flat_no_mr=p.flat_no_mr,
+        floor_no_en=p.floor_no_en,
+        floor_no_mr=p.floor_no_mr,
         building_name_en=p.building_name_en,
+        building_name_mr=p.building_name_mr,
+        block_sector_en=p.block_sector_en,
+        block_sector_mr=p.block_sector_mr,
         road_en=p.road_en,
+        road_mr=p.road_mr,
         other_desc=p.other_desc,
+        eother_desc=p.eother_desc,
+        potkharaba_area=p.potkharaba_area,
+        other_right_mr=p.other_right_mr,
+        other_right_en=p.other_right_en,
     )
 
 
@@ -72,30 +89,13 @@ def add_property(
     current_user: models.User = Depends(get_current_user),
 ):
     _entry_or_404(db, entry_id, current_user)
-    if len(payload.attributes) > 2:
-        raise HTTPException(status_code=400, detail="Maximum 2 Attributes can be selected.")
 
+    data = payload.model_dump()
+    attrs = data.pop("attributes", [])
     record = models.PropertyDetail(
         document_entry_id=entry_id,
-        district=payload.district,
-        village_name=payload.village_name,
-        urban_rural=payload.urban_rural,
-        hadd_type=payload.hadd_type,
-        hadd_name=payload.hadd_name,
-        taluka=payload.taluka,
-        zp=payload.zp,
-        attributes=_attrs_to_json(payload.attributes),
-        area=payload.area,
-        area_unit=payload.area_unit,
-        property_type=payload.property_type,
-        pui_number=payload.pui_number,
-        address_type=payload.address_type,
-        flat_no_en=payload.flat_no_en, flat_no_mr=payload.flat_no_mr,
-        floor_no_en=payload.floor_no_en, floor_no_mr=payload.floor_no_mr,
-        building_name_en=payload.building_name_en, building_name_mr=payload.building_name_mr,
-        block_sector_en=payload.block_sector_en, block_sector_mr=payload.block_sector_mr,
-        road_en=payload.road_en, road_mr=payload.road_mr,
-        other_desc=payload.other_desc,
+        attributes=_attrs_to_json(attrs),
+        **data,
     )
     db.add(record)
     db.commit()
@@ -152,6 +152,23 @@ def verify_pui(
 # Party Details (repeatable)
 # ---------------------------------------------------------------------------
 
+def _format_party_out(party: models.PartyDetail) -> schemas.PartyDetailOut:
+    addr_parts = [
+        party.flat_no_en or party.flat_no_mr,
+        party.floor_no_en or party.floor_no_mr,
+        party.building_name_en or party.building_name_mr,
+        party.block_sector_en or party.block_sector_mr,
+        party.road_en or party.road_mr,
+        party.city_en or party.city_mr,
+        party.district_name,
+        party.pin_code,
+    ]
+    address_combined = ", ".join([p for p in addr_parts if p]) or "—"
+    out = schemas.PartyDetailOut.model_validate(party)
+    out.address_combined = address_combined
+    return out
+
+
 @router.post("/{entry_id}/parties", response_model=schemas.PartyDetailOut, status_code=201)
 def add_party(
     entry_id: str,
@@ -160,17 +177,34 @@ def add_party(
     current_user: models.User = Depends(get_current_user),
 ):
     _entry_or_404(db, entry_id, current_user)
-    if not payload.pan_number and not payload.declaration_form_60_61:
-        # Manual: Form 60/61 declaration is the alternative when PAN is absent.
-        raise HTTPException(
-            status_code=400,
-            detail="Provide a PAN number, or check 'Is Declaration Attached (Form 60/61)'.",
-        )
     record = models.PartyDetail(document_entry_id=entry_id, **payload.model_dump())
     db.add(record)
     db.commit()
     db.refresh(record)
-    return record
+    return _format_party_out(record)
+
+
+@router.put("/{entry_id}/parties/{party_id}", response_model=schemas.PartyDetailOut)
+def update_party(
+    entry_id: str,
+    party_id: str,
+    payload: schemas.PartyDetailCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _entry_or_404(db, entry_id, current_user)
+    record = (
+        db.query(models.PartyDetail)
+        .filter(models.PartyDetail.id == party_id, models.PartyDetail.document_entry_id == entry_id)
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Party not found")
+    for key, value in payload.model_dump().items():
+        setattr(record, key, value)
+    db.commit()
+    db.refresh(record)
+    return _format_party_out(record)
 
 
 @router.get("/{entry_id}/parties", response_model=List[schemas.PartyDetailOut])
@@ -180,7 +214,7 @@ def list_parties(
     current_user: models.User = Depends(get_current_user),
 ):
     entry = _entry_or_404(db, entry_id, current_user)
-    return entry.parties
+    return [_format_party_out(p) for p in entry.parties]
 
 
 @router.delete("/{entry_id}/parties/{party_id}", status_code=204)
@@ -201,6 +235,26 @@ def delete_party(
     db.delete(record)
     db.commit()
     return None
+
+
+@router.post("/{entry_id}/parties/{party_id}/verify-mobile")
+def verify_mobile(
+    entry_id: str,
+    party_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _entry_or_404(db, entry_id, current_user)
+    party = (
+        db.query(models.PartyDetail)
+        .filter(models.PartyDetail.id == party_id, models.PartyDetail.document_entry_id == entry_id)
+        .first()
+    )
+    if not party:
+        raise HTTPException(status_code=404, detail="Party not found")
+    party.mobile_number_verified = True
+    db.commit()
+    return {"verified": True, "mobile_number": party.mobile_number}
 
 
 @router.post("/{entry_id}/verify-pan", response_model=schemas.PanVerifyResponse)
@@ -233,6 +287,32 @@ def add_identification(
     _entry_or_404(db, entry_id, current_user)
     record = models.IdentificationDetail(document_entry_id=entry_id, **payload.model_dump())
     db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.put("/{entry_id}/identifications/{identification_id}", response_model=schemas.IdentificationDetailOut)
+def update_identification(
+    entry_id: str,
+    identification_id: str,
+    payload: schemas.IdentificationDetailCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _entry_or_404(db, entry_id, current_user)
+    record = (
+        db.query(models.IdentificationDetail)
+        .filter(
+            models.IdentificationDetail.id == identification_id,
+            models.IdentificationDetail.document_entry_id == entry_id,
+        )
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Identification not found")
+    for key, value in payload.model_dump().items():
+        setattr(record, key, value)
     db.commit()
     db.refresh(record)
     return record
@@ -348,10 +428,12 @@ def complete_entry(
     current_user: models.User = Depends(get_current_user),
 ):
     entry = _entry_or_404(db, entry_id, current_user)
+    validate_entry_ready_for_completion(entry)
     entry.status = "SUBMITTED"
-    db.commit()
-
     token = entry.token
+    if token:
+        token.status = "SUBMITTED"
+    db.commit()
     offices: List[models.RegistrationOffice] = []
     if token and token.district_id:
         offices = (

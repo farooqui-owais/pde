@@ -48,7 +48,12 @@ export default function StampDutyCalculate() {
   async function handleCalculate() {
     setError("");
     if (!selectedClause) { setError(t("stampduty.selectClauseError")); return; }
-    if (!marketValue || !considerationAmount) { setError(t("stampduty.enterValuesError")); return; }
+    const mv = Number(marketValue);
+    const ca = Number(considerationAmount);
+    if (!marketValue || !considerationAmount || Number.isNaN(mv) || Number.isNaN(ca) || mv <= 0 || ca <= 0) {
+      setError(t("stampduty.enterValuesError"));
+      return;
+    }
     try {
       const { data } = await api.post("/api/stamp/calculate-advanced", {
         clause_id: selectedClause,
@@ -72,17 +77,6 @@ export default function StampDutyCalculate() {
         <h1 className="calc-title">{t("stampduty.title")}</h1>
 
         {error && <div className="banner banner-error">{error}</div>}
-
-        <div style={{ display: "flex", gap: 20, marginBottom: 16 }}>
-          <div className="field" style={{ marginBottom: 0, flex: 1 }}>
-            <label>{t("document.marketValue")}</label>
-            <input type="number" min="0" value={marketValue} onChange={(e) => setMarketValue(e.target.value)} />
-          </div>
-          <div className="field" style={{ marginBottom: 0, flex: 1 }}>
-            <label>{t("document.considerationAmount")}</label>
-            <input type="number" min="0" value={considerationAmount} onChange={(e) => setConsiderationAmount(e.target.value)} />
-          </div>
-        </div>
 
         <div className="calc-tree">
           {tree ? (
@@ -123,7 +117,6 @@ export default function StampDutyCalculate() {
         </div>
 
         <div className="calc-actions">
-          <button className="btn btn-blue" onClick={handleCalculate}>{t("stampduty.calculate")}</button>
           <button className="btn btn-outline" onClick={handleCalculate} disabled={!result}>{t("stampduty.saveAndClose")}</button>
           <button className="btn btn-blue" onClick={() => navigate(-1)}>{t("stampduty.exitWithoutChange")}</button>
         </div>

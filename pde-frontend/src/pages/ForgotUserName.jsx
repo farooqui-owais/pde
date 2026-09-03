@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderTeal from "../components/HeaderTeal.jsx";
 import Footer from "../components/Footer.jsx";
+import {
+  formatApiValidationError,
+  validateForgotUsernameForm,
+  validateOtp,
+} from "../utils/validation.js";
 import "./ForgotUserName.css";
 
 const CAPTCHA_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -17,6 +23,7 @@ function generateCaptcha() {
 }
 
 export default function ForgotUserName() {
+  const { t } = useTranslation(["validation"]);
   // step 1: mobile + security question -> send OTP
   const [form, setForm] = useState({ mobile_number: "", security_question: "", security_answer: "", captcha: "" });
   const [captcha, setCaptcha] = useState(generateCaptcha);
@@ -48,6 +55,8 @@ export default function ForgotUserName() {
       setError("Invalid CAPTCHA. Please match the text shown.");
       return;
     }
+    const validationError = validateForgotUsernameForm(form);
+    if (validationError) { setError(t(validationError)); return; }
 
     setLoading(true);
     try {
@@ -72,6 +81,8 @@ export default function ForgotUserName() {
   async function handleVerifyOtp(e) {
     e.preventDefault();
     setError("");
+    const validationError = validateOtp(otp);
+    if (validationError) { setError(t(validationError)); return; }
 
     setLoading(true);
     try {

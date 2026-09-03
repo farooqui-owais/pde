@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderTeal from "../components/HeaderTeal.jsx";
 import Footer from "../components/Footer.jsx";
+import { formatApiValidationError, validateRegistrationForm } from "../utils/validation.js";
 import "./Register.css";
 
 const EMPTY = {
@@ -16,7 +17,7 @@ const EMPTY = {
 };
 
 export default function Register() {
-  const { t } = useTranslation(["auth", "common"]);
+  const { t } = useTranslation(["auth", "common", "validation"]);
   const navigate = useNavigate();
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState("");
@@ -41,8 +42,8 @@ export default function Register() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError(""); setSuccess("");
-    if (form.password !== form.confirm_password) { setError(t("auth:passwordMismatchReg")); return; }
-    if (form.password.length < 8) { setError(t("auth:passwordTooShortReg")); return; }
+    const validationError = validateRegistrationForm(form);
+    if (validationError) { setError(t(validationError)); return; }
 
     setLoading(true);
     try {
@@ -51,7 +52,7 @@ export default function Register() {
       setSuccess(t("auth:accountCreated"));
       setTimeout(() => navigate("/login"), 1200);
     } catch (err) {
-      setError(err?.response?.data?.detail || t("auth:registrationFailed"));
+      setError(formatApiValidationError(err?.response?.data?.detail, t) || t("auth:registrationFailed"));
     } finally {
       setLoading(false);
     }

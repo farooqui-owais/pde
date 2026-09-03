@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
+import { formatApiValidationError, validateWitnessForm } from "../utils/validation.js";
 import "./EntrySteps.css";
 
 const ID_PROOFS = ["Aadhar Card", "PAN Card", "Passport", "Voter ID", "Driving Licence"];
@@ -11,25 +12,29 @@ const ID_PROOFS = ["Aadhar Card", "PAN Card", "Passport", "Voter ID", "Driving L
 const BLANK = {
   surname_en: "", first_name_en: "", middle_name_en: "",
   surname_mr: "", first_name_mr: "", middle_name_mr: "",
-  address_en: "", address_mr: "", age: "", pin_code: "",
+  address_en: "", address_mr: "",
+  age: "", pin_code: "",
   identification_proof: "Aadhar Card", proof_number: "",
 };
 
 export default function IdentificationDetails() {
-  const { t } = useTranslation(["pages", "common"]);
+  const { t } = useTranslation(["pages", "common", "validation"]);
   const { id } = useParams();
   const navigate = useNavigate();
 
   const [form, setForm] = useState(BLANK);
-  const [identifications, setIdentifications] = useState([]);
+  const [records, setRecords] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function load() {
     try {
       const { data } = await api.get(`/api/documents/${id}/identifications`);
-      setIdentifications(data);
-    } catch { setIdentifications([]); }
+      setRecords(data);
+    } catch {
+      setRecords([]);
+    }
   }
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
@@ -38,33 +43,74 @@ export default function IdentificationDetails() {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
-  async function handleAdd() {
+  function handleSelectRow(item) {
+    setSelectedId(item.id);
+    setForm({
+      surname_en: item.surname_en || "",
+      first_name_en: item.first_name_en || "",
+      middle_name_en: item.middle_name_en || "",
+      surname_mr: item.surname_mr || "",
+      first_name_mr: item.first_name_mr || "",
+      middle_name_mr: item.middle_name_mr || "",
+      address_en: item.address_en || "",
+      address_mr: item.address_mr || "",
+      age: item.age != null ? String(item.age) : "",
+      pin_code: item.pin_code || "",
+      identification_proof: item.identification_proof || "Aadhar Card",
+      proof_number: item.proof_number || "",
+    });
+  }
+
+  function handleCancelEdit() {
+    setSelectedId(null);
+    setForm(BLANK);
     setError("");
+  }
+
+  async function handleSaveOrUpdate() {
+    setError("");
+    const validationError = validateWitnessForm(form);
+    if (validationError) {
+      setError(t(validationError));
+      return;
+    }
     setSaving(true);
+    const payload = {
+      ...form,
+      age: form.age ? Number(form.age) : null,
+    };
     try {
-      await api.post(`/api/documents/${id}/identifications`, {
-        ...form,
-        age: form.age ? Number(form.age) : null,
-      });
-      setForm(BLANK);
+      if (selectedId) {
+        await api.put(`/api/documents/${id}/identifications/${selectedId}`, payload);
+      } else {
+        await api.post(`/api/documents/${id}/identifications`, payload);
+      }
+      handleCancelEdit();
       await load();
     } catch (err) {
-      setError(err?.response?.data?.detail || t("identification.couldNotSave"));
+      setError(formatApiValidationError(err?.response?.data?.detail, t) || t("identification.couldNotSave"));
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(identId) {
+  async function handleDelete(recordId) {
+    if (!window.confirm(t("common:delete") + "?")) return;
     try {
-      await api.delete(`/api/documents/${id}/identifications/${identId}`);
+      await api.delete(`/api/documents/${id}/identifications/${recordId}`);
+      if (selectedId === recordId) handleCancelEdit();
       await load();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
-  function handleViewReport() {
-    if (identifications.length === 0) { setError(t("identification.mustAdd")); return; }
-    navigate(`/entries/${id}/report`);
+  function handleNext() {
+    if (records.length === 0) {
+      setError(t("identification.mustAdd"));
+      return;
+    }
+    navigate(`/entries/${id}/digital-submission`);
   }
 
   return (
@@ -72,12 +118,16 @@ export default function IdentificationDetails() {
       <HeaderSarita />
       <div className="page-body entry-body">
         <h1 className="entry-title">{t("identification.title")}</h1>
-        <div className="entry-hint">{t("identification.hint")}</div>
-        <div className="entry-count">{t("identification.count")} <b>{identifications.length + 1}</b></div>
+        <p className="entry-hint">{t("identification.hint")}</p>
+        <div className="entry-count">{t("identification.count")} <b>{records.length + 1}</b></div>
 
         {error && <div className="banner banner-error">{error}</div>}
 
         <div className="entry-grid">
+          <label>{t("identification.identificationCount") || "Identification Count"}</label>
+          <input value={records.length + 1} readOnly style={{ backgroundColor: "#edf2f7" }} />
+          <span />
+
           <div className="section-heading"><span>{t("identification.nameEnglish")}</span><span>{t("identification.nameMarathi")}</span></div>
 
           <label>{t("common:surname")}</label>
@@ -95,7 +145,7 @@ export default function IdentificationDetails() {
           <label>{t("identification.middleNameMr")}</label>
           <input value={form.middle_name_mr} onChange={(e) => update("middle_name_mr", e.target.value)} />
 
-          <label>{t("common:address")}</label>
+          <label>{t("identification.address")}</label>
           <textarea rows={2} value={form.address_en} onChange={(e) => update("address_en", e.target.value)} />
           <label>{t("identification.addressMr")}</label>
           <textarea rows={2} value={form.address_mr} onChange={(e) => update("address_mr", e.target.value)} />
@@ -105,7 +155,7 @@ export default function IdentificationDetails() {
           <label>{t("common:pinCode")}</label>
           <input value={form.pin_code} onChange={(e) => update("pin_code", e.target.value)} />
 
-          <label>{t("party.identificationProof")}</label>
+          <label>{t("identification.colProof")}</label>
           <select value={form.identification_proof} onChange={(e) => update("identification_proof", e.target.value)}>
             {ID_PROOFS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
@@ -115,33 +165,45 @@ export default function IdentificationDetails() {
 
         <div className="entry-actions">
           <button type="button" className="btn btn-blue" onClick={() => navigate(`/entries/${id}/parties`)}>{t("common:previous")}</button>
-          <button type="button" className="btn btn-outline" onClick={() => setForm(BLANK)}>{t("common:cancel")}</button>
-          <button type="button" className="btn btn-green" onClick={handleAdd} disabled={saving}>{saving ? t("common:saving") : t("identification.saveEntity")}</button>
-          <button type="button" className="btn btn-green" onClick={handleViewReport}>{t("identification.viewReport")}</button>
+          <button type="button" className="btn btn-outline" onClick={handleCancelEdit}>{t("common:cancel")}</button>
+          <button type="button" className="btn btn-green" onClick={handleSaveOrUpdate} disabled={saving}>
+            {saving ? t("common:saving") : t("identification.saveEntity")}
+          </button>
+          <button type="button" className="btn btn-green" onClick={handleNext}>{t("common:next")}</button>
         </div>
 
         <div className="step-table-title">{t("identification.tableTitle")}</div>
         <table className="step-table">
           <thead>
-            <tr><th>{t("common:select")}</th><th>{t("common:delete")}</th><th>{t("identification.colSurname")}</th><th>{t("identification.colFirstName")}</th><th>{t("common:age")}</th><th>{t("identification.colAddress")}</th><th>{t("identification.colProof")}</th></tr>
+            <tr>
+              <th>{t("common:select")}</th>
+              <th>{t("common:delete")}</th>
+              <th>{t("identification.colSurname")}</th>
+              <th>{t("identification.colFirstName")}</th>
+              <th>{t("common:age")}</th>
+              <th>{t("identification.colAddress")}</th>
+              <th>{t("common:pinCode")}</th>
+              <th>{t("identification.colProof")}</th>
+            </tr>
           </thead>
           <tbody>
-            {identifications.length === 0 && <tr><td colSpan={7} style={{ color: "#777" }}>{t("identification.noRows")}</td></tr>}
-            {identifications.map((i) => (
-              <tr key={i.id}>
-                <td><a href="#" onClick={(e) => e.preventDefault()}>{t("common:select")}</a></td>
-                <td><a href="#" onClick={(e) => { e.preventDefault(); handleDelete(i.id); }}>{t("common:delete")}</a></td>
-                <td>{i.surname_en || "—"}</td>
-                <td>{i.first_name_en || "—"}</td>
-                <td>{i.age ?? "—"}</td>
-                <td>{i.address_en || "—"}</td>
-                <td>{i.identification_proof} {i.proof_number}</td>
+            {records.length === 0 && <tr><td colSpan={8} style={{ color: "#777" }}>{t("identification.noRows")}</td></tr>}
+            {records.map((item) => (
+              <tr key={item.id}>
+                <td><a href="#" onClick={(e) => { e.preventDefault(); handleSelectRow(item); }}>{t("common:select")}</a></td>
+                <td><a href="#" onClick={(e) => { e.preventDefault(); handleDelete(item.id); }}>{t("common:delete")}</a></td>
+                <td>{item.surname_mr || item.surname_en || "—"}</td>
+                <td>{item.first_name_mr || item.first_name_en || "—"}</td>
+                <td>{item.age ?? "—"}</td>
+                <td>{item.address_mr || item.address_en || "—"}</td>
+                <td>{item.pin_code || "—"}</td>
+                <td>{item.identification_proof || "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <Footer office={{ dig: "Pune", jdr: "Pune", sro: "Joint S.R. Haveli 14" }} />
+      <Footer />
     </div>
   );
 }

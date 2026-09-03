@@ -12,8 +12,8 @@ from pydantic import BaseModel, Field, validator
 # Token schemas
 # ---------------------------------------------------------------------------
 class TokenCreate(BaseModel):
-    token_number: str = Field(..., description="11‑digit token number generated for the citizen")
     password: str = Field(..., min_length=8, description="Password meeting complexity rules")
+    token_number: Optional[str] = Field(None, description="Optional; server generates an 11-digit number when omitted")
 
 class TokenResponse(BaseModel):
     id: str

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, String, Integer, DateTime, ForeignKey, Enum, Numeric, Text, Boolean
+    Column, String, Integer, DateTime, Date, ForeignKey, Enum, Numeric, Text, Boolean, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -66,10 +66,42 @@ class User(Base):
     security_answer_hash = Column(String(255), nullable=True)
 
     is_active = Column(Boolean, default=True)
+    is_guest = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tokens = relationship("EntryToken", back_populates="user")
     entries = relationship("DocumentEntry", back_populates="user")
+
+
+class OfficeSlotConfig(Base):
+    __tablename__ = "office_slot_configs"
+    id = Column(Integer, primary_key=True)
+    office_id = Column(Integer, ForeignKey("registration_offices.id"), nullable=False)
+    office_type = Column(String(20), default="Regular")  # "Regular" | "Model"
+    day_start_time = Column(String(5), default="07:50")   # "HH:MM" 24h
+    day_end_time = Column(String(5), default="15:00")
+    slot_length_minutes = Column(Integer, default=10)
+    is_open_saturday = Column(Boolean, default=True)
+    is_open_sunday = Column(Boolean, default=True)
+
+
+class SlotBooking(Base):
+    __tablename__ = "slot_bookings"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    office_id = Column(Integer, ForeignKey("registration_offices.id"), nullable=False)
+    office_type = Column(String(20), default="Regular")
+    booking_date = Column(Date, nullable=False)
+    slot_number = Column(Integer, nullable=False)
+    slot_start_time = Column(String(5), nullable=False)
+    slot_end_time = Column(String(5), nullable=False)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    token_id = Column(UUID(as_uuid=False), ForeignKey("entry_tokens.id"), nullable=True)
+    status = Column(String(20), default="BOOKED")  # BOOKED | CANCELLED
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("office_id", "booking_date", "slot_number", name="uq_slot_per_office_per_day"),
+    )
 
 
 class EntryToken(Base):
@@ -84,15 +116,19 @@ class EntryToken(Base):
     language = Column(String(20), default="Marathi")
     district_id = Column(Integer, ForeignKey("districts.id"), nullable=True)
     office_id = Column(Integer, ForeignKey("registration_offices.id"), nullable=True)
+    slot_booking_id = Column(UUID(as_uuid=False), ForeignKey("slot_bookings.id", use_alter=True, name="fk_entry_tokens_slot_booking"), nullable=True)
 
     presenter_name = Column(String(150), nullable=True)
     status = Column(String(20), default="OPEN")  # OPEN / SUBMITTED / CANCELLED
+    # Used for Data Entry without Login / Modify Old Entry (token + password).
+    access_password_hash = Column(String(255), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="tokens")
     district = relationship("District")
     office = relationship("RegistrationOffice")
+    slot_booking = relationship("SlotBooking", foreign_keys=[slot_booking_id])
     entry = relationship("DocumentEntry", back_populates="token", uselist=False)
 
 
@@ -256,6 +292,10 @@ class PropertyDetail(Base):
     road_en = Column(String(150), nullable=True)
     road_mr = Column(String(150), nullable=True)
     other_desc = Column(Text, nullable=True)
+    eother_desc = Column(Text, nullable=True)
+    potkharaba_area = Column(Numeric(14, 2), nullable=True, default=0.0)
+    other_right_mr = Column(String(200), nullable=True)
+    other_right_en = Column(String(200), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -320,6 +360,25 @@ class PartyDetail(Base):
     is_document_signed = Column(Boolean, default=True)
     is_exemption_section_88 = Column(Boolean, default=False)
 
+    # Gap 2: Additional reference fields
+    party_sr_no = Column(Integer, nullable=True)
+    alias_name_mr = Column(String(150), nullable=True)
+    alias_name_en = Column(String(150), nullable=True)
+    id_type = Column(String(20), nullable=True)
+    id_no = Column(String(40), nullable=True)
+    full_pan_name = Column(String(200), nullable=True)
+    survey_no = Column(String(60), nullable=True)
+    khata_no = Column(String(60), nullable=True)
+    party_area = Column(Numeric(14, 2), nullable=True)
+    vikri_area = Column(Numeric(14, 2), nullable=True)
+    potkharaba_area = Column(Numeric(14, 2), nullable=True)
+    potkharaba_vikri_area = Column(Numeric(14, 2), nullable=True)
+    seller_khata_no = Column(String(60), nullable=True)
+    seller_first_name = Column(String(80), nullable=True)
+    seller_middle_name = Column(String(80), nullable=True)
+    seller_last_name = Column(String(80), nullable=True)
+    mobile_number_verified = Column(Boolean, default=False)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     document_entry = relationship("DocumentEntry", back_populates="parties")
@@ -352,3 +411,55 @@ class IdentificationDetail(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     document_entry = relationship("DocumentEntry", back_populates="identifications")
+
+
+class DraftDocumentFile(Base):
+    """Digital Document / Digital Execution Page uploads (compulsory pair)."""
+    __tablename__ = "draft_document_files"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    document_entry_id = Column(UUID(as_uuid=False), ForeignKey("document_entries.id"), nullable=False)
+    category = Column(String(100), nullable=False)  # "Digital Document (without Execution Page)" | "Digital Execution Page (without sign)"
+    original_filename = Column(String(255), nullable=False)
+    stored_path = Column(String(500), nullable=False)
+    file_size = Column(Integer, nullable=False)
+    uploaded_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AnnexureFile(Base):
+    """Scanned Required Annexure uploads (optional)."""
+    __tablename__ = "annexure_files"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    document_entry_id = Column(UUID(as_uuid=False), ForeignKey("document_entries.id"), nullable=False)
+    title = Column(String(120), default="Scanned Required Annexure")
+    title_other = Column(String(120), nullable=True)
+    poa_name = Column(String(150), nullable=True)
+    poa_principle = Column(String(150), nullable=True)
+    original_filename = Column(String(255), nullable=False)
+    stored_path = Column(String(500), nullable=False)
+    file_size = Column(Integer, nullable=False)
+    uploaded_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PartyDocumentFile(Base):
+    """Per-party Identity and PAN / Form-16 uploads."""
+    __tablename__ = "party_document_files"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    party_id = Column(UUID(as_uuid=False), ForeignKey("party_details.id"), nullable=False)
+    doc_kind = Column(String(20), nullable=False)  # "IDENTITY" | "PAN_FORM16"
+    proof_type = Column(String(60), nullable=True)
+    original_filename = Column(String(255), nullable=False)
+    stored_path = Column(String(500), nullable=False)
+    file_size = Column(Integer, nullable=False)
+    uploaded_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+
+class DigitalSubmissionPreference(Base):
+    """Stores the top YES/NO radio choice per document entry."""
+    __tablename__ = "digital_submission_preferences"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    document_entry_id = Column(UUID(as_uuid=False), ForeignKey("document_entries.id"), nullable=False, unique=True)
+    wants_digital_submission = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

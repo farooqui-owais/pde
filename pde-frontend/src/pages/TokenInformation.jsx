@@ -124,21 +124,13 @@ export default function TokenInformation() {
 
   // ---- Edit Token Details ----
   function openEdit(tokenRow) {
-    setEditToken(tokenRow);
-    setEditForm({
-      language: tokenRow.language || "\u092e\u0930\u093e\u0920\u0940",
-      district_id: tokenRow.district_id || "",
-      office_id: tokenRow.office_id || "",
-      presenter_name: tokenRow.presenter_name || "",
+    navigate("/entries/new", { 
+      state: { 
+        tokenId: tokenRow.id, 
+        tokenNumber: tokenRow.token_number, 
+        entryId: tokenRow.entry_id 
+      } 
     });
-    setEditError("");
-    setEditSuccess("");
-    if (tokenRow.district_id) {
-      api.get("/api/reference/offices", { params: { district_id: tokenRow.district_id } })
-        .then((r) => setEditOffices(r.data)).catch(() => setEditOffices([]));
-    } else {
-      setEditOffices([]);
-    }
   }
 
   function closeEdit() {
@@ -251,6 +243,7 @@ export default function TokenInformation() {
               </div>
               <div className="tok-new-actions">
                 <button className="btn btn-blue" type="submit">{t("common:start")}</button>
+               
                 <button type="button" className="btn btn-red" onClick={() => setNewToken({ language: "\u092e\u0930\u093e\u0920\u0940", district_id: "", office_id: "" })}>{t("common:cancel")}</button>
               </div>
             </form>

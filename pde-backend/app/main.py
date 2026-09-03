@@ -1,25 +1,126 @@
+import time
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .config import get_settings
 from .database import Base, engine
 from .middleware import CSRFProtectMiddleware, SecurityHeadersMiddleware
-from .routers import auth, tokens, documents, reference, stamp, pde, entry_details
+from . import models, models_pde, models_scheme, models_verification
+from .routers import (
+    auth, tokens, documents, reference, stamp, pde, entry_details,
+    projects, schemes, seller_parties, scheme_identifier, scheme_documents, templates,
+    execution_captures, ekyc_verifications, sign_agreements, valuation_rates, slots,
+    digital_submission,
+)
 from .seed import run as seed_reference_data
 
 settings = get_settings()
 
-Base.metadata.create_all(bind=engine)
 
-# Auto-seed districts / offices / article types / document titles on every
-# startup. seed.run() only inserts rows that don't already exist, so this
-# is safe to call every time and means a fresh docker-compose / DB never
-# ends up with empty Select Article / Document Title dropdowns.
-try:
-    seed_reference_data()
-except Exception as exc:  # pragma: no cover - defensive, don't crash the API
-    print(f"[startup] reference-data seed skipped: {exc}")
+def _ensure_additive_columns():
+    """Add columns introduced after the first create_all on existing databases."""
+    statements = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE entry_tokens ADD COLUMN IF NOT EXISTS access_password_hash VARCHAR(255)",
+        "ALTER TABLE entry_tokens ADD COLUMN IF NOT EXISTS slot_booking_id VARCHAR(36)",
+        # Gap 3: Property Details missing columns
+        "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS eother_desc TEXT",
+        "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS potkharaba_area NUMERIC(14,2) DEFAULT 0.0",
+        "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS other_right_mr VARCHAR(200)",
+        "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS other_right_en VARCHAR(200)",
+        # Gap 2: Party Details missing columns
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS party_sr_no INTEGER",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS alias_name_mr VARCHAR(150)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS alias_name_en VARCHAR(150)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS id_type VARCHAR(20)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS id_no VARCHAR(40)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS full_pan_name VARCHAR(200)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS survey_no VARCHAR(60)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS khata_no VARCHAR(60)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS party_area NUMERIC(14,2)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS vikri_area NUMERIC(14,2)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS potkharaba_area NUMERIC(14,2)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS potkharaba_vikri_area NUMERIC(14,2)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS seller_khata_no VARCHAR(60)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS seller_first_name VARCHAR(80)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS seller_middle_name VARCHAR(80)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS seller_last_name VARCHAR(80)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS mobile_number_verified BOOLEAN DEFAULT FALSE",
+    ]
+    dialect = engine.dialect.name
+    with engine.begin() as conn:
+        if dialect == "postgresql":
+            for stmt in statements:
+                conn.execute(text(stmt))
+        elif dialect == "sqlite":
+            def add_col_sqlite(table, col_name, col_def):
+                cols = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+                if col_name not in cols:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}"))
+
+            add_col_sqlite("users", "is_guest", "BOOLEAN DEFAULT 0")
+            add_col_sqlite("entry_tokens", "access_password_hash", "VARCHAR(255)")
+            add_col_sqlite("entry_tokens", "slot_booking_id", "VARCHAR(36)")
+            # Gap 3
+            add_col_sqlite("property_details", "eother_desc", "TEXT")
+            add_col_sqlite("property_details", "potkharaba_area", "NUMERIC(14,2) DEFAULT 0.0")
+            add_col_sqlite("property_details", "other_right_mr", "VARCHAR(200)")
+            add_col_sqlite("property_details", "other_right_en", "VARCHAR(200)")
+            # Gap 2
+            add_col_sqlite("party_details", "party_sr_no", "INTEGER")
+            add_col_sqlite("party_details", "alias_name_mr", "VARCHAR(150)")
+            add_col_sqlite("party_details", "alias_name_en", "VARCHAR(150)")
+            add_col_sqlite("party_details", "id_type", "VARCHAR(20)")
+            add_col_sqlite("party_details", "id_no", "VARCHAR(40)")
+            add_col_sqlite("party_details", "full_pan_name", "VARCHAR(200)")
+            add_col_sqlite("party_details", "survey_no", "VARCHAR(60)")
+            add_col_sqlite("party_details", "khata_no", "VARCHAR(60)")
+            add_col_sqlite("party_details", "party_area", "NUMERIC(14,2)")
+            add_col_sqlite("party_details", "vikri_area", "NUMERIC(14,2)")
+            add_col_sqlite("party_details", "potkharaba_area", "NUMERIC(14,2)")
+            add_col_sqlite("party_details", "potkharaba_vikri_area", "NUMERIC(14,2)")
+            add_col_sqlite("party_details", "seller_khata_no", "VARCHAR(60)")
+            add_col_sqlite("party_details", "seller_first_name", "VARCHAR(80)")
+            add_col_sqlite("party_details", "seller_middle_name", "VARCHAR(80)")
+            add_col_sqlite("party_details", "seller_last_name", "VARCHAR(80)")
+            add_col_sqlite("party_details", "mobile_number_verified", "BOOLEAN DEFAULT 0")
+
+
+def _init_db(max_attempts=15, retry_delay=1.0):
+    """Create the schema and seed reference data once Postgres is reachable.
+
+    The API container often starts before the DB pod finishes booting. The
+    original one-shot ``create_all`` failed once, was swallowed by ``try/except``,
+    and left the DB empty — every DB-backed endpoint then returned a 500. The
+    browser blamed CORS because a 500 body bypasses CORSMiddleware (no
+    Access-Control-Allow-Origin header). Retrying here lets a fresh deployment
+    self-heal instead of silently serving broken queries.
+    """
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            Base.metadata.create_all(bind=engine)
+            _ensure_additive_columns()
+            seed_reference_data()
+            print(f"[startup] Schema + reference data ready (attempt {attempt}).")
+            return
+        except Exception as exc:
+            last_exc = exc
+            print(f"[startup] DB init attempt {attempt}/{max_attempts} failed: {exc}")
+            time.sleep(retry_delay)
+    print(
+        f"[startup] WARNING: DB init still failing after {max_attempts} attempts "
+        f"({last_exc}). DB-backed endpoints will 500 until it succeeds."
+    )
+
+
+_init_db()
+
 
 app = FastAPI(
     title=settings["APP_NAME"],
@@ -57,6 +158,18 @@ app.include_router(reference.router)
 app.include_router(stamp.router)
 app.include_router(pde.router)
 app.include_router(entry_details.router)
+app.include_router(projects.router)
+app.include_router(schemes.router)
+app.include_router(seller_parties.router)
+app.include_router(scheme_identifier.router)
+app.include_router(scheme_documents.router)
+app.include_router(templates.router)
+app.include_router(execution_captures.router)
+app.include_router(ekyc_verifications.router)
+app.include_router(sign_agreements.router)
+app.include_router(valuation_rates.router)
+app.include_router(slots.router)
+app.include_router(digital_submission.router)
 
 
 @app.get("/api/health")

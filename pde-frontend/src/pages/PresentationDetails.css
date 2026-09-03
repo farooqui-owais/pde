@@ -1,0 +1,59 @@
+.pd-loading,
+.pd-error {
+  padding: 2rem;
+  text-align: center;
+  color: #444;
+}
+
+.pd-error {
+  color: #b00020;
+}
+
+.pd-body {
+  padding: 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.pd-main-title {
+  color: #2e8b57;
+  border-bottom: 2px solid #2e8b57;
+  padding-bottom: 8px;
+  margin-bottom: 20px;
+}
+
+.pd-section {
+  margin-bottom: 24px;
+}
+
+.pd-section-title {
+  margin: 12px 0 8px;
+  color: #22437a;
+}
+
+.pd-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+
+.pd-table.pd-table-bordered th,
+.pd-table.pd-table-bordered td {
+  border: 1px solid #ccc;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pd-table.pd-table-bordered th {
+  background: #eef3fb;
+  color: #22437a;
+  font-weight: 600;
+}
+
+.pd-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+}

@@ -6,7 +6,10 @@ import Footer from "../components/Footer.jsx";
 import "./Dashboard.css";
 
 const MODULES = [
+
   { title: "Registration", desc: "Public Data Entry for DakhalNama property registration", color: "var(--green)", to: "/tokens" },
+  { title: "Scheme Details", desc: "Builder & Developer Scheme Management, Seller Entries & Deed Templates", color: "var(--blue)", to: "/schemes" },
+  { title: "Valuation Rates", desc: "Reference/master Ready Reckoner rates by district, taluka & village (TBD data source)", color: "var(--green)", to: "/valuation-rates" },
   { title: "Marriage", desc: "Public Data Entry for Notice of Intended Marriage", color: "var(--blue)", to: null },
   { title: "eFiling", desc: "Data entry for eFiling (Notice of Intimation)", color: "var(--blue)", to: null },
   { title: "\u0967/\u0967\u0968 Mutations", desc: "Data entry for Land Record 7/12 Mutation", color: "var(--red)", to: null },

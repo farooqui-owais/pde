@@ -80,3 +80,5 @@ aws/parameters/dev.json
 /pde-backend/docker.md
 /pde-frontend/Dockerfile
 /pde-frontend/.dockerignore
+/pde-backend/app/database.local.py
+pde-antigravity-documentation

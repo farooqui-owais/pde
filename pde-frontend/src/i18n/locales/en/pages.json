@@ -269,7 +269,8 @@
     "sroOfficeName": "SRO Office Name",
     "noOffices": "No offices configured for this district yet.",
     "complete": "Complete",
-    "couldNotLoad": "Could not load confirmation."
+    "couldNotLoad": "Could not load confirmation.",
+    "optionalExecutionLink": "Optional: record Execution Capture / eKYC / Sign Agreement for this entry (not part of the standard manual workflow)"
   },
   "dashboard": {
     "welcome": "Welcome :",
@@ -307,5 +308,50 @@
     "noPayments": "No stamp payments added yet.",
     "amountRequired": "Amount is required.",
     "couldNotSave": "Could not save this stamp payment."
+  },
+  "execution": {
+    "title": "Execution Capture / eKYC / Sign Agreement",
+    "tbdNotice": "This screen is not described by the iSarita Public Data Entry manual. It records optional post-submission steps (device/provider integration is TBD) and does not affect your Token Number or registration office selection.",
+    "couldNotLoad": "Could not load this screen.",
+    "couldNotSave": "Could not save this action.",
+    "selectParty": "Select Party",
+    "selectPartyOption": "-- Select Party (optional) --",
+    "captureTitle": "Execution Capture",
+    "captureAction": "Record Capture",
+    "noCaptures": "No captures recorded yet.",
+    "colParty": "Party",
+    "colType": "Type",
+    "colMasked": "Identifier",
+    "colMethod": "Method",
+    "colAction": "Action",
+    "ekycTitle": "eKYC Verification",
+    "ekycAction": "Start Verification",
+    "providerPlaceholder": "Provider (TBD)",
+    "identifierPlaceholder": "Identifier (never stored raw)",
+    "ekycMaskNote": "Only a masked value is ever stored; the raw identifier you type here is used only to display a masked preview and is not sent anywhere in this demo screen.",
+    "noEkyc": "No eKYC verifications yet.",
+    "markVerified": "Mark Verified",
+    "markFailed": "Mark Failed",
+    "signTitle": "Sign Agreement",
+    "signAction": "Create Agreement",
+    "noAgreements": "No sign agreements yet.",
+    "markSigned": "Mark Signed",
+    "markDeclined": "Mark Declined"
+  },
+  "valuationRates": {
+    "title": "Valuation Rates (Ready Reckoner Reference)",
+    "tbdNotice": "This is master/reference data. The authoritative Ready Reckoner data source is TBD — rates entered here are not automatically used in Stamp Duty calculation.",
+    "couldNotLoad": "Could not load valuation rates.",
+    "couldNotSave": "Could not save this rate.",
+    "needDistrictVillage": "District and Village are required.",
+    "district": "District",
+    "taluka": "Taluka",
+    "village": "Village",
+    "ratePerSqft": "Rate / Sq.Ft",
+    "ratePerSqm": "Rate / Sq.M",
+    "ratePerAcre": "Rate / Acre",
+    "filterByDistrict": "Filter by District",
+    "tableTitle": "Configured Valuation Rates",
+    "noRows": "No valuation rates configured yet."
   }
 }

@@ -2,7 +2,22 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field, field_validator, model_validator
+
+from .validators import (
+    has_bilingual_name,
+    validate_age_optional,
+    validate_email_optional,
+    validate_mobile_optional,
+    validate_mobile_required,
+    validate_non_empty_str,
+    validate_pan_optional,
+    validate_password,
+    validate_pin_code,
+    validate_positive_decimal,
+    validate_token_number,
+    validate_username,
+)
 
 
 # ---------- Auth / User ----------
@@ -35,6 +50,31 @@ class UserCreate(BaseModel):
     security_question: Optional[str] = None
     security_answer: Optional[str] = None
 
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: str) -> str:
+        return validate_username(v)
+
+    @field_validator("password")
+    @classmethod
+    def _password(cls, v: str) -> str:
+        return validate_password(v)
+
+    @field_validator("mobile_number")
+    @classmethod
+    def _mobile(cls, v: str) -> str:
+        return validate_mobile_required(v)
+
+    @field_validator("pin_code")
+    @classmethod
+    def _pin(cls, v: str) -> str:
+        return validate_pin_code(v)
+
+    @field_validator("pan_number")
+    @classmethod
+    def _pan(cls, v: Optional[str]) -> Optional[str]:
+        return validate_pan_optional(v)
+
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -45,6 +85,7 @@ class UserOut(BaseModel):
     username: str
     email: EmailStr
     mobile_number: str
+    is_guest: bool = False
 
 
 class Token(BaseModel):
@@ -89,12 +130,32 @@ class UserUpdate(BaseModel):
     road_street: Optional[str] = None
     area_locality: Optional[str] = None
 
+    @field_validator("mobile_number")
+    @classmethod
+    def _mobile(cls, v: str) -> str:
+        return validate_mobile_required(v)
+
+    @field_validator("pin_code")
+    @classmethod
+    def _pin(cls, v: str) -> str:
+        return validate_pin_code(v)
+
+    @field_validator("pan_number")
+    @classmethod
+    def _pan(cls, v: Optional[str]) -> Optional[str]:
+        return validate_pan_optional(v)
+
 
 # ---------- Change / Forgot Password, Forgot UserName ----------
 
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _new_password(cls, v: str) -> str:
+        return validate_password(v)
 
 
 class VerifyPasswordRequest(BaseModel):
@@ -116,11 +177,21 @@ class ForgotPasswordResetRequest(BaseModel):
     reset_token: str
     new_password: str
 
+    @field_validator("new_password")
+    @classmethod
+    def _new_password(cls, v: str) -> str:
+        return validate_password(v)
+
 
 class ForgotUsernameSendOtpRequest(BaseModel):
     mobile_number: str
     security_question: str
     security_answer: str
+
+    @field_validator("mobile_number")
+    @classmethod
+    def _mobile(cls, v: str) -> str:
+        return validate_mobile_required(v)
 
 
 class ForgotUsernameSendOtpResponse(BaseModel):
@@ -180,6 +251,7 @@ class TokenEntryCreate(BaseModel):
     district_id: Optional[int] = None
     office_id: Optional[int] = None
     presenter_name: Optional[str] = None
+    slot_booking_id: Optional[str] = None
 
 
 class TokenEntryOut(BaseModel):
@@ -192,6 +264,7 @@ class TokenEntryOut(BaseModel):
     office_id: Optional[int] = None
     office_name: Optional[str] = None
     presenter_name: Optional[str] = None
+    slot_booking_id: Optional[str] = None
     status: str
     created_at: datetime
 
@@ -221,17 +294,58 @@ class TokenFilter(BaseModel):
     presenter_name: Optional[str] = None
 
 
+class GuestTokenStart(BaseModel):
+    """Data Entry without Login → Start Registration New Entry."""
+
+    language: str = "Marathi"
+    district_id: Optional[int] = None
+    office_id: Optional[int] = None
+    presenter_name: Optional[str] = None
+    password: str = Field(..., min_length=8)
+
+
+class GuestTokenResume(BaseModel):
+    """Data Entry without Login → Modify Old Entry (11-digit token + password)."""
+
+    token_number: str = Field(..., min_length=11, max_length=11)
+    password: str
+
+    @field_validator("token_number")
+    @classmethod
+    def _token_number(cls, v: str) -> str:
+        return validate_token_number(v)
+
+
+class GuestSessionOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
+    token: TokenEntryOut
+
+
 # ---------- Document Entry ----------
 
 class DocumentEntryCreate(BaseModel):
     token_id: str
-    article_type_id: Optional[int] = None
+    article_type_id: int
     document_title: Optional[str] = None
     date_of_execution: Optional[datetime] = None
     date_of_presentation: Optional[datetime] = None
-    market_value: Optional[Decimal] = None
-    consideration_amount: Optional[Decimal] = None
-    number_of_pages: Optional[int] = None
+    market_value: Decimal
+    consideration_amount: Decimal
+    number_of_pages: Optional[int] = Field(default=None, ge=1)
+
+    @field_validator("market_value", "consideration_amount")
+    @classmethod
+    def _amounts(cls, v: Decimal) -> Decimal:
+        return validate_positive_decimal(v, "Value")  # type: ignore[return-value]
+
+    @model_validator(mode="after")
+    def _presentation_dates(self):
+        if self.date_of_execution and self.date_of_presentation:
+            if self.date_of_presentation.date() < self.date_of_execution.date():
+                raise ValueError("Date of presentation cannot be before date of execution")
+        return self
 
 
 class DocumentEntryOut(BaseModel):
@@ -249,12 +363,22 @@ class DocumentEntryOut(BaseModel):
     stamp_duty_difference: Optional[Decimal] = None
     number_of_pages: Optional[int] = None
     status: str
+    token_number: Optional[str] = None
+    district_name: Optional[str] = None
+    office_name: Optional[str] = None
 
 
 class StampDutyCalcRequest(BaseModel):
     market_value: Decimal
     consideration_amount: Decimal
     article_type_id: Optional[int] = None
+
+    @field_validator("market_value", "consideration_amount")
+    @classmethod
+    def _amounts(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Market value and consideration amount must be greater than zero")
+        return v
 
 
 class StampDutyCalcResponse(BaseModel):
@@ -269,6 +393,26 @@ class RentSlab(BaseModel):
     to_month: int
     rent: Decimal
 
+    @field_validator("rent")
+    @classmethod
+    def _rent(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("Rent cannot be negative")
+        return v
+
+    @field_validator("from_month", "to_month")
+    @classmethod
+    def _months_in_range(cls, v: int) -> int:
+        if v < 1 or v > 12:
+            raise ValueError("Month must be between 1 and 12")
+        return v
+
+    @model_validator(mode="after")
+    def _month_order(self):
+        if self.to_month < self.from_month:
+            raise ValueError("'To month' cannot be before 'From month' in a rent slab")
+        return self
+
 
 class RentTermCreate(BaseModel):
     document_entry_id: str
@@ -280,6 +424,24 @@ class RentTermCreate(BaseModel):
     refundable_deposit: Optional[Decimal] = None
     non_refundable_deposit: Optional[Decimal] = 0
     rent_slabs: list[RentSlab] = []
+
+    @field_validator("refundable_deposit", "non_refundable_deposit")
+    @classmethod
+    def _deposits(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        return validate_positive_decimal(v, "Deposit")
+
+    @field_validator("license_period_months")
+    @classmethod
+    def _license_period(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 1:
+            raise ValueError("License period must be at least 1 month")
+        return v
+
+    @model_validator(mode="after")
+    def _date_order(self):
+        if self.from_date and self.to_date and self.to_date < self.from_date:
+            raise ValueError("To date cannot be before From date")
+        return self
 
 
 class RentTermOut(BaseModel):
@@ -300,7 +462,7 @@ class RentTermOut(BaseModel):
 class StampPaymentCreate(BaseModel):
     document_entry_id: str
     paid_by: str
-    amount: Decimal
+    amount: Decimal = Field(..., gt=0)
     payment_date: Optional[datetime] = None
     franking_mc_no: Optional[str] = None
     franking_serial_no: Optional[str] = None
@@ -312,6 +474,11 @@ class StampPaymentCreate(BaseModel):
     vendors_name: Optional[str] = None
     purchasers_name: Optional[str] = None
     epurchasers_name: Optional[str] = None
+
+    @field_validator("document_entry_id", "paid_by")
+    @classmethod
+    def _required_text(cls, v: str) -> str:
+        return validate_non_empty_str(v, "Field")
 
 
 class StampPaymentOut(BaseModel):
@@ -344,6 +511,23 @@ class StampDutyAdvancedRequest(BaseModel):
     railway_cess_percent: Decimal = Decimal("0")
     is_investor_clause: bool = False
 
+    @field_validator("clause_id")
+    @classmethod
+    def _clause(cls, v: str) -> str:
+        return validate_non_empty_str(v, "Clause")
+
+    @field_validator("market_value", "consideration_amount")
+    @classmethod
+    def _amounts(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Market value and consideration amount must be greater than zero")
+        return v
+
+    @field_validator("surcharge_percent", "metro_cess_percent", "railway_cess_percent")
+    @classmethod
+    def _percents(cls, v: Decimal) -> Decimal:
+        return validate_positive_decimal(v, "Percentage")
+
 
 class StampDutyAdvancedResponse(BaseModel):
     actual_stamp_duty: Decimal
@@ -359,8 +543,8 @@ class PropertyAttribute(BaseModel):
 
 
 class PropertyDetailCreate(BaseModel):
-    district: Optional[str] = None
-    village_name: Optional[str] = None
+    district: str
+    village_name: str
     urban_rural: str = "Urban"
     hadd_type: Optional[str] = None
     hadd_name: Optional[str] = None
@@ -383,6 +567,28 @@ class PropertyDetailCreate(BaseModel):
     road_en: Optional[str] = None
     road_mr: Optional[str] = None
     other_desc: Optional[str] = None
+    eother_desc: Optional[str] = None
+    potkharaba_area: Optional[Decimal] = Decimal("0.0")
+    other_right_mr: Optional[str] = None
+    other_right_en: Optional[str] = None
+
+    @field_validator("district", "village_name")
+    @classmethod
+    def _required_text(cls, v: str) -> str:
+        return validate_non_empty_str(v, "Field")
+
+    @field_validator("area")
+    @classmethod
+    def _area(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v <= 0:
+            raise ValueError("Area must be greater than zero when provided")
+        return v
+
+    @model_validator(mode="after")
+    def _attributes_limit(self):
+        if len(self.attributes) > 2:
+            raise ValueError("Maximum 2 attributes can be selected")
+        return self
 
 
 class PropertyDetailOut(BaseModel):
@@ -402,13 +608,32 @@ class PropertyDetailOut(BaseModel):
     property_type: Optional[str] = None
     pui_number: Optional[str] = None
     pui_verified: bool = False
+    address_type: Optional[str] = "Address"
+    flat_no_en: Optional[str] = None
+    flat_no_mr: Optional[str] = None
+    floor_no_en: Optional[str] = None
+    floor_no_mr: Optional[str] = None
     building_name_en: Optional[str] = None
+    building_name_mr: Optional[str] = None
+    block_sector_en: Optional[str] = None
+    block_sector_mr: Optional[str] = None
     road_en: Optional[str] = None
+    road_mr: Optional[str] = None
     other_desc: Optional[str] = None
+    eother_desc: Optional[str] = None
+    potkharaba_area: Optional[Decimal] = Decimal("0.0")
+    other_right_mr: Optional[str] = None
+    other_right_en: Optional[str] = None
+    property_code: Optional[str] = None
 
 
 class PuiVerifyRequest(BaseModel):
     pui_number: str
+
+    @field_validator("pui_number")
+    @classmethod
+    def _pui(cls, v: str) -> str:
+        return validate_non_empty_str(v, "PUI / Property Tax number")
 
 
 class PuiVerifyResponse(BaseModel):
@@ -420,7 +645,7 @@ class PuiVerifyResponse(BaseModel):
 # ---------- Party Details (repeatable) ----------
 
 class PartyDetailCreate(BaseModel):
-    party_type: Optional[str] = None
+    party_type: str
     surname_en: Optional[str] = None
     first_name_en: Optional[str] = None
     middle_name_en: Optional[str] = None
@@ -460,6 +685,72 @@ class PartyDetailCreate(BaseModel):
     is_document_signed: bool = True
     is_exemption_section_88: bool = False
 
+    # Gap 2 fields
+    party_sr_no: Optional[int] = None
+    alias_name_mr: Optional[str] = None
+    alias_name_en: Optional[str] = None
+    id_type: Optional[str] = None
+    id_no: Optional[str] = None
+    full_pan_name: Optional[str] = None
+    survey_no: Optional[str] = None
+    khata_no: Optional[str] = None
+    party_area: Optional[Decimal] = None
+    vikri_area: Optional[Decimal] = None
+    potkharaba_area: Optional[Decimal] = None
+    potkharaba_vikri_area: Optional[Decimal] = None
+    seller_khata_no: Optional[str] = None
+    seller_first_name: Optional[str] = None
+    seller_middle_name: Optional[str] = None
+    seller_last_name: Optional[str] = None
+    mobile_number_verified: bool = False
+
+    @field_validator("party_type")
+    @classmethod
+    def _party_type(cls, v: str) -> str:
+        return validate_non_empty_str(v, "Party type")
+
+    @field_validator("pan_number")
+    @classmethod
+    def _pan(cls, v: Optional[str]) -> Optional[str]:
+        return validate_pan_optional(v)
+
+    @field_validator("mobile_number")
+    @classmethod
+    def _mobile(cls, v: Optional[str]) -> Optional[str]:
+        return validate_mobile_optional(v)
+
+    @field_validator("pin_code")
+    @classmethod
+    def _pin(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not str(v).strip():
+            return None
+        return validate_pin_code(str(v))
+
+    @field_validator("age")
+    @classmethod
+    def _age(cls, v: Optional[int]) -> Optional[int]:
+        return validate_age_optional(v)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: Optional[str]) -> Optional[str]:
+        return validate_email_optional(v)
+
+    @model_validator(mode="after")
+    def _party_rules(self):
+        if not self.pan_number and not self.declaration_form_60_61:
+            raise ValueError(
+                "Provide a PAN number, or check 'Is Declaration Attached (Form 60/61)'."
+            )
+        if not has_bilingual_name(
+            self.first_name_en,
+            self.first_name_mr,
+            self.surname_en,
+            self.surname_mr,
+        ):
+            raise ValueError("Party name (English or Marathi) is required")
+        return self
+
 
 class PartyDetailOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -469,20 +760,74 @@ class PartyDetailOut(BaseModel):
     surname_en: Optional[str] = None
     first_name_en: Optional[str] = None
     middle_name_en: Optional[str] = None
+    surname_mr: Optional[str] = None
+    first_name_mr: Optional[str] = None
+    middle_name_mr: Optional[str] = None
     age: Optional[int] = None
-    is_bank: bool
-    is_stamp_purchaser: bool
-    is_presentor: bool
+    is_bank: bool = False
+    is_stamp_purchaser: bool = False
+    is_presentor: bool = False
+    flat_no_en: Optional[str] = None
+    flat_no_mr: Optional[str] = None
+    floor_no_en: Optional[str] = None
+    floor_no_mr: Optional[str] = None
+    building_name_en: Optional[str] = None
+    building_name_mr: Optional[str] = None
+    block_sector_en: Optional[str] = None
+    block_sector_mr: Optional[str] = None
+    road_en: Optional[str] = None
+    road_mr: Optional[str] = None
     pin_code: Optional[str] = None
+    country: Optional[str] = "India"
+    state_en: Optional[str] = None
+    state_mr: Optional[str] = None
+    city_en: Optional[str] = None
+    city_mr: Optional[str] = None
+    district_name: Optional[str] = None
+    uid: Optional[str] = None
+    mobile_number: Optional[str] = None
+    mobile_number_verified: bool = False
+    identification_mark1: Optional[str] = None
+    identification_mark2: Optional[str] = None
     pan_number: Optional[str] = None
     pan_verified: bool = False
-    mobile_number: Optional[str] = None
-    is_document_signed: bool
-    is_exemption_section_88: bool
+    declaration_form_60_61: bool = False
+    identification_proof: Optional[str] = None
+    identification_proof_number: Optional[str] = None
+    email: Optional[str] = None
+    is_document_signed: bool = True
+    is_exemption_section_88: bool = False
+
+    party_sr_no: Optional[int] = None
+    alias_name_mr: Optional[str] = None
+    alias_name_en: Optional[str] = None
+    id_type: Optional[str] = None
+    id_no: Optional[str] = None
+    full_pan_name: Optional[str] = None
+    survey_no: Optional[str] = None
+    khata_no: Optional[str] = None
+    party_area: Optional[Decimal] = None
+    vikri_area: Optional[Decimal] = None
+    potkharaba_area: Optional[Decimal] = None
+    potkharaba_vikri_area: Optional[Decimal] = None
+    seller_khata_no: Optional[str] = None
+    seller_first_name: Optional[str] = None
+    seller_middle_name: Optional[str] = None
+    seller_last_name: Optional[str] = None
+
+    address_combined: Optional[str] = None
 
 
 class PanVerifyRequest(BaseModel):
     pan_number: str
+
+    @field_validator("pan_number")
+    @classmethod
+    def _pan(cls, v: str) -> str:
+        result = validate_pan_optional(v)
+        if not result:
+            raise ValueError("PAN number is required")
+        return result
 
 
 class PanVerifyResponse(BaseModel):
@@ -502,10 +847,45 @@ class IdentificationDetailCreate(BaseModel):
     middle_name_mr: Optional[str] = None
     address_en: Optional[str] = None
     address_mr: Optional[str] = None
-    age: Optional[int] = None
+    age: int
     pin_code: Optional[str] = None
-    identification_proof: Optional[str] = None
-    proof_number: Optional[str] = None
+    identification_proof: str
+    proof_number: str
+
+    @field_validator("age")
+    @classmethod
+    def _age(cls, v: int) -> int:
+        result = validate_age_optional(v)
+        if result is None:
+            raise ValueError("Age is required")
+        return result
+
+    @field_validator("identification_proof", "proof_number")
+    @classmethod
+    def _proof_fields(cls, v: str) -> str:
+        return validate_non_empty_str(v, "Field")
+
+    @field_validator("pin_code")
+    @classmethod
+    def _pin(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not str(v).strip():
+            return None
+        return validate_pin_code(str(v))
+
+    @model_validator(mode="after")
+    def _witness_name(self):
+        if not has_bilingual_name(
+            self.first_name_en,
+            self.first_name_mr,
+            self.surname_en,
+            self.surname_mr,
+        ):
+            raise ValueError("Witness name (English or Marathi) is required")
+        if not (self.address_en and self.address_en.strip()) and not (
+            self.address_mr and self.address_mr.strip()
+        ):
+            raise ValueError("Witness address (English or Marathi) is required")
+        return self
 
 
 class IdentificationDetailOut(BaseModel):
@@ -515,8 +895,12 @@ class IdentificationDetailOut(BaseModel):
     surname_en: Optional[str] = None
     first_name_en: Optional[str] = None
     middle_name_en: Optional[str] = None
+    surname_mr: Optional[str] = None
+    first_name_mr: Optional[str] = None
+    middle_name_mr: Optional[str] = None
     age: Optional[int] = None
     address_en: Optional[str] = None
+    address_mr: Optional[str] = None
     pin_code: Optional[str] = None
     identification_proof: Optional[str] = None
     proof_number: Optional[str] = None
