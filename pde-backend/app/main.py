@@ -32,6 +32,7 @@ def _ensure_additive_columns():
         "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS other_right_mr VARCHAR(200)",
         "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS other_right_en VARCHAR(200)",
         # Gap 2: Party Details missing columns
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS entity_type VARCHAR(80)",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS party_sr_no INTEGER",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS alias_name_mr VARCHAR(150)",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS alias_name_en VARCHAR(150)",
@@ -78,6 +79,7 @@ def _ensure_additive_columns():
             add_col_sqlite("property_details", "other_right_mr", "VARCHAR(200)")
             add_col_sqlite("property_details", "other_right_en", "VARCHAR(200)")
             # Gap 2
+            add_col_sqlite("party_details", "entity_type", "VARCHAR(80)")
             add_col_sqlite("party_details", "party_sr_no", "INTEGER")
             add_col_sqlite("party_details", "alias_name_mr", "VARCHAR(150)")
             add_col_sqlite("party_details", "alias_name_en", "VARCHAR(150)")

@@ -5,6 +5,8 @@ import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
 import { formatApiValidationError, validatePropertyForm } from "../utils/validation.js";
+import { useEnMrAutoTranslate } from "../hooks/useEnMrAutoTranslate.js";
+import { TRANSLATION_PAIRS } from "../utils/translationPairs.js";
 import {
   ATTRIBUTE_TYPES,
   AREA_UNITS,
@@ -101,6 +103,9 @@ export default function PropertyDetails() {
   function update(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
+
+  // Auto-translate paired English → Marathi fields (PropertyDetails config).
+  useEnMrAutoTranslate(form, update, TRANSLATION_PAIRS.PropertyDetails);
 
   function handleDistrictChange(value) {
     setForm((prev) => ({ ...prev, district: value, taluka: "", village_name: "" }));

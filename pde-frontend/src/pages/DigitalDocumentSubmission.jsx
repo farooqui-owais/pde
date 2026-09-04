@@ -241,8 +241,10 @@ export default function DigitalDocumentSubmission() {
   }
 
   function handleNextClick() {
+    // Real portal flow (pdeigr.maharashtra.gov.in): after Digital Document
+    // Submission the Next button goes to slot booking, not the report page.
     if (!wantsDigital) {
-      navigate(`/entries/${id}/report`);
+      navigate("/slot-booking");
       return;
     }
     if (!submitted) {
@@ -253,7 +255,7 @@ export default function DigitalDocumentSubmission() {
         return;
       }
     }
-    navigate(`/entries/${id}/report`);
+    navigate("/slot-booking");
   }
 
   return (

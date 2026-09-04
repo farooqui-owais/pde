@@ -4,6 +4,43 @@
 .entry-count { color: #666; font-size: 13px; margin-bottom: 14px; }
 .entry-count b { color: var(--ink); }
 
+/* Party count — single aligned row */
+.entry-count-row { display: flex; align-items: center; gap: 10px; }
+.entry-count-row label { font-weight: 700; font-size: 13.5px; }
+.entry-count-row input {
+  width: 80px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  background: #f7f7f7;
+}
+
+/* Full-width row split into two 50% halves (label + field), matching the
+   200px label column used by .entry-grid so everything lines up */
+.party-half-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+  align-items: center;
+  margin-bottom: 12px;
+  grid-column: 1 / -1;
+}
+.party-half { display: grid; grid-template-columns: 200px 1fr; gap: 0 20px; align-items: center; }
+/* Half without a leading label — content takes the full 50% */
+.party-half.party-half-nolabel { grid-template-columns: 1fr; }
+.party-half label { font-weight: 700; font-size: 13.5px; text-align: right; }
+.party-half select,
+.party-half input {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  width: 100%;
+  background: #fff;
+}
+.party-half select { font-size: 13.5px; }
+/* DropdownOrText wrapper should not add its own borders */
+.party-half > div { width: 100%; }
+
 .entry-grid { display: grid; grid-template-columns: 200px 1fr 200px 1fr; gap: 12px 20px; align-items: center; }
 .entry-grid label { font-weight: 700; font-size: 13.5px; text-align: right; }
 .entry-grid input, .entry-grid select, .entry-grid textarea { border: 1px solid var(--hairline-strong); border-radius: var(--radius); padding: 8px 10px; width: 100%; }
@@ -21,6 +58,15 @@
 .entry-actions { display: flex; justify-content: flex-start; gap: 14px; margin-top: 18px; }
 
 .step-table-title { font-weight: 700; color: var(--green); margin: 24px 0 8px; }
+
+.entry-footer-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin-top: 18px;
+  font-size: 13px;
+  color: var(--ink);
+}
 .step-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .step-table th, .step-table td { border: 1px solid var(--hairline); padding: 6px 8px; text-align: left; }
 .step-table th { background: #f2f2f2; }
@@ -50,3 +96,14 @@
 .confirm-table { width: 100%; border-collapse: collapse; margin: 0 auto 20px; }
 .confirm-table th, .confirm-table td { border: 1px solid var(--hairline); padding: 8px 10px; font-size: 13px; }
 .confirm-table th { background: #f2f2f2; }
+.confirm-table th { background: #f2f2f2; }
+
+/* DropdownOrText "Other / type it" fallback control */
+.pd-custom-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.pd-custom-row input { flex: 1 1 auto; }
+.pd-link-btn {
+  background: none; border: none; color: #2563eb;
+  text-decoration: underline; cursor: pointer;
+  font-size: 12.5px; white-space: nowrap; padding: 0;
+}
+.pd-link-btn:hover { color: #1d4ed8; }

@@ -330,6 +330,7 @@ class PartyDetail(Base):
     document_entry_id = Column(UUID(as_uuid=False), ForeignKey("document_entries.id"), nullable=False)
 
     party_type = Column(String(80), nullable=True)  # e.g. Seller/Vendor, Purchaser
+    entity_type = Column(String(80), nullable=True)  # legal entity category: Individual, Company, Trust, HUF, ...
 
     surname_en = Column(String(80), nullable=True)
     first_name_en = Column(String(80), nullable=True)

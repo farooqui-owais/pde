@@ -5,16 +5,21 @@ import api from "../api/axios.js";
 import HeaderSarita from "../components/HeaderSarita.jsx";
 import Footer from "../components/Footer.jsx";
 import { formatApiValidationError, validateWitnessForm } from "../utils/validation.js";
+import { useEnMrAutoTranslate } from "../hooks/useEnMrAutoTranslate.js";
+import { TRANSLATION_PAIRS } from "../utils/translationPairs.js";
 import "./EntrySteps.css";
 
 const ID_PROOFS = ["Aadhar Card", "PAN Card", "Passport", "Voter ID", "Driving Licence"];
+
+const PARTY_TYPE_WITNESS = "Sakshidar";
+const ID_TYPE_P = "P";
 
 const BLANK = {
   surname_en: "", first_name_en: "", middle_name_en: "",
   surname_mr: "", first_name_mr: "", middle_name_mr: "",
   address_en: "", address_mr: "",
-  age: "", pin_code: "",
-  identification_proof: "Aadhar Card", proof_number: "",
+  age: "", pin_code: "", date_of_birth: "",
+  identification_proof: "", proof_number: "",
 };
 
 export default function IdentificationDetails() {
@@ -43,6 +48,9 @@ export default function IdentificationDetails() {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
+  // Auto-translate paired English → Marathi fields (IdentificationDetails config).
+  useEnMrAutoTranslate(form, update, TRANSLATION_PAIRS.IdentificationDetails);
+
   function handleSelectRow(item) {
     setSelectedId(item.id);
     setForm({
@@ -56,7 +64,8 @@ export default function IdentificationDetails() {
       address_mr: item.address_mr || "",
       age: item.age != null ? String(item.age) : "",
       pin_code: item.pin_code || "",
-      identification_proof: item.identification_proof || "Aadhar Card",
+      date_of_birth: item.date_of_birth || "",
+      identification_proof: item.identification_proof || "",
       proof_number: item.proof_number || "",
     });
   }
@@ -105,8 +114,43 @@ export default function IdentificationDetails() {
     }
   }
 
-  function handleNext() {
-    if (records.length === 0) {
+  async function handleNext() {
+    setError("");
+
+    // Per the iSarita flow: commit any in-progress identifier before moving on
+    // (same behaviour as the manual's "Update" button on this screen).
+    const hasDraft = Object.values(form).some((v) => v !== "" && v !== null && v !== undefined);
+    let savedCount = records.length;
+
+    if (hasDraft) {
+      const validationError = validateWitnessForm(form);
+      if (validationError) {
+        setError(t(validationError));
+        return;
+      }
+      setSaving(true);
+      const payload = {
+        ...form,
+        age: form.age ? Number(form.age) : null,
+      };
+      try {
+        if (selectedId) {
+          await api.put(`/api/documents/${id}/identifications/${selectedId}`, payload);
+        } else {
+          await api.post(`/api/documents/${id}/identifications`, payload);
+          savedCount += 1;
+        }
+        handleCancelEdit();
+      } catch (err) {
+        setError(formatApiValidationError(err?.response?.data?.detail, t) || t("identification.couldNotSave"));
+        return;
+      } finally {
+        setSaving(false);
+      }
+      await load();
+    }
+
+    if (savedCount === 0) {
       setError(t("identification.mustAdd"));
       return;
     }
@@ -145,18 +189,23 @@ export default function IdentificationDetails() {
           <label>{t("identification.middleNameMr")}</label>
           <input value={form.middle_name_mr} onChange={(e) => update("middle_name_mr", e.target.value)} />
 
-          <label>{t("identification.address")}</label>
-          <textarea rows={2} value={form.address_en} onChange={(e) => update("address_en", e.target.value)} />
+          <label>{t("identification.addressEn")}</label>
+          <textarea rows={3} value={form.address_en} onChange={(e) => update("address_en", e.target.value)} />
           <label>{t("identification.addressMr")}</label>
-          <textarea rows={2} value={form.address_mr} onChange={(e) => update("address_mr", e.target.value)} />
+          <textarea rows={3} value={form.address_mr} onChange={(e) => update("address_mr", e.target.value)} />
 
           <label>{t("common:age")}</label>
           <input type="number" min="0" value={form.age} onChange={(e) => update("age", e.target.value)} />
           <label>{t("common:pinCode")}</label>
           <input value={form.pin_code} onChange={(e) => update("pin_code", e.target.value)} />
 
+          <label>{t("identification.dateOfBirth")}</label>
+          <input type="date" value={form.date_of_birth} onChange={(e) => update("date_of_birth", e.target.value)} />
+          <span />
+
           <label>{t("identification.colProof")}</label>
           <select value={form.identification_proof} onChange={(e) => update("identification_proof", e.target.value)}>
+            <option value="">{t("identification.selectProofOption")}</option>
             {ID_PROOFS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <label>{t("party.proofNo")}</label>
@@ -164,44 +213,73 @@ export default function IdentificationDetails() {
         </div>
 
         <div className="entry-actions">
-          <button type="button" className="btn btn-blue" onClick={() => navigate(`/entries/${id}/parties`)}>{t("common:previous")}</button>
-          <button type="button" className="btn btn-outline" onClick={handleCancelEdit}>{t("common:cancel")}</button>
+          <button type="button" className="btn btn-orange" onClick={() => navigate(`/entries/${id}/parties`)}>Previous/मागी</button>
+          <button type="button" className="btn btn-blue" onClick={handleCancelEdit}>Cancel/रद्द करा</button>
           <button type="button" className="btn btn-green" onClick={handleSaveOrUpdate} disabled={saving}>
-            {saving ? t("common:saving") : t("identification.saveEntity")}
+            {saving ? t("common:saving") : "Save/साठवा"}
           </button>
-          <button type="button" className="btn btn-green" onClick={handleNext}>{t("common:next")}</button>
+          <button type="button" className="btn btn-orange" onClick={handleNext}>Next</button>
         </div>
 
-        <div className="step-table-title">{t("identification.tableTitle")}</div>
+        <div className="step-table-title">{t("identification.tableTitle")} :</div>
         <table className="step-table">
           <thead>
             <tr>
               <th>{t("common:select")}</th>
               <th>{t("common:delete")}</th>
+              <th>{t("identification.colPartyType")}</th>
               <th>{t("identification.colSurname")}</th>
               <th>{t("identification.colFirstName")}</th>
+              <th>{t("identification.colMiddleName")}</th>
               <th>{t("common:age")}</th>
               <th>{t("identification.colAddress")}</th>
               <th>{t("common:pinCode")}</th>
-              <th>{t("identification.colProof")}</th>
+              <th>{t("identification.colPanNo")}</th>
+              <th>{t("identification.colSroId")}</th>
+              <th>{t("identification.colSrNo")}</th>
+              <th>{t("identification.colIdType")}</th>
+              <th>{t("identification.colIdNo")}</th>
+              <th>{t("identification.colEngLName")}</th>
+              <th>{t("identification.colEngFname")}</th>
+              <th>{t("identification.colEngMname")}</th>
+              <th>{t("identification.colEngAddress")}</th>
+              <th>{t("identification.colFullPanName")}</th>
             </tr>
           </thead>
           <tbody>
-            {records.length === 0 && <tr><td colSpan={8} style={{ color: "#777" }}>{t("identification.noRows")}</td></tr>}
-            {records.map((item) => (
+            {records.length === 0 && <tr><td colSpan={19} style={{ color: "#777" }}>{t("identification.noRows")}</td></tr>}
+            {records.map((item, idx) => (
               <tr key={item.id}>
                 <td><a href="#" onClick={(e) => { e.preventDefault(); handleSelectRow(item); }}>{t("common:select")}</a></td>
                 <td><a href="#" onClick={(e) => { e.preventDefault(); handleDelete(item.id); }}>{t("common:delete")}</a></td>
+                <td>{PARTY_TYPE_WITNESS}</td>
                 <td>{item.surname_mr || item.surname_en || "—"}</td>
                 <td>{item.first_name_mr || item.first_name_en || "—"}</td>
+                <td>{item.middle_name_mr || item.middle_name_en || "—"}</td>
                 <td>{item.age ?? "—"}</td>
                 <td>{item.address_mr || item.address_en || "—"}</td>
                 <td>{item.pin_code || "—"}</td>
-                <td>{item.identification_proof || "—"}</td>
+                <td>{item.identification_proof === "PAN Card" ? item.proof_number || "—" : "—"}</td>
+                <td>False</td>
+                <td>{idx + 1}</td>
+                <td>{ID_TYPE_P}</td>
+                <td>{item.proof_number || "—"}</td>
+                <td>{item.surname_en || "—"}</td>
+                <td>{item.first_name_en || "—"}</td>
+                <td>{item.middle_name_en || "—"}</td>
+                <td>{item.address_en || "—"}</td>
+                <td>{[item.first_name_en, item.middle_name_en, item.surname_en].filter(Boolean).join(" ") || "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        <div className="entry-footer-info">
+          <div>{t("identification.footerDataEntry")} <b>{id}</b></div>
+          <div>{t("identification.footerDig")}</div>
+          <div>{t("identification.footerJdr")}</div>
+          <div>{t("identification.footerSro")}</div>
+        </div>
       </div>
       <Footer />
     </div>

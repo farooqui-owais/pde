@@ -159,6 +159,7 @@ export function validatePropertyForm(form) {
 export function validatePartyForm(form) {
   return firstError(
     validateRequired(form.party_type, "validation.partyTypeRequired"),
+    validateRequired(form.entity_type, "validation.entityTypeRequired"),
     hasBilingualName(form.first_name_en, form.first_name_mr, form.surname_en, form.surname_mr)
       ? null
       : "validation.partyNameRequired",
@@ -167,6 +168,9 @@ export function validatePartyForm(form) {
     validateMobile(form.mobile_number),
     validatePinCode(form.pin_code),
     validateAge(form.age),
+    validateRequired(form.country, "validation.countryRequired"),
+    validateRequired(form.state_en, "validation.stateRequired"),
+    validateRequired(form.city_en, "validation.cityRequired"),
   );
 }
 

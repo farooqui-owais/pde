@@ -657,6 +657,7 @@ class PuiVerifyResponse(BaseModel):
 
 class PartyDetailCreate(BaseModel):
     party_type: str
+    entity_type: Optional[str] = None
     surname_en: Optional[str] = None
     first_name_en: Optional[str] = None
     middle_name_en: Optional[str] = None
@@ -768,6 +769,7 @@ class PartyDetailOut(BaseModel):
     id: str
     document_entry_id: str
     party_type: Optional[str] = None
+    entity_type: Optional[str] = None
     surname_en: Optional[str] = None
     first_name_en: Optional[str] = None
     middle_name_en: Optional[str] = None
