@@ -38,6 +38,7 @@ class UserCreate(BaseModel):
     pan_number: Optional[str] = None
 
     pin_code: str
+    country: Optional[str] = "India"
     state: Optional[str] = None
     district_name: Optional[str] = None
     city: Optional[str] = None
@@ -102,6 +103,17 @@ class LoginRequest(BaseModel):
 class UsernameAvailability(BaseModel):
     username: str
     available: bool
+
+
+class PincodeLookupResponse(BaseModel):
+    """Auto-fill payload returned for a 6-digit PIN code (India Post data)."""
+    pin_code: str
+    country: str = "India"
+    state: Optional[str] = None
+    district: Optional[str] = None
+    city: Optional[str] = None
+    areas: list[str] = []
+    found: bool = False
 
 
 class UserUpdate(BaseModel):

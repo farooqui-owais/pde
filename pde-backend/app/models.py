@@ -59,6 +59,7 @@ class User(Base):
     pan_number = Column(String(15), nullable=True)
 
     pin_code = Column(String(10), nullable=False)
+    country = Column(String(60), default="India")
     state = Column(String(80), nullable=True)
     district_name = Column(String(80), nullable=True)
     city = Column(String(80), nullable=True)

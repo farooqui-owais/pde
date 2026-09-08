@@ -74,6 +74,49 @@ def check_username(username: str, db: Session = Depends(get_db)):
     return schemas.UsernameAvailability(username=username, available=exists is None)
 
 
+@router.get("/pincode-lookup", response_model=schemas.PincodeLookupResponse)
+def pincode_lookup(pin: str):
+    """Auto-fill Country/State/City/Area from a 6-digit PIN code.
+
+    Proxies the India Post "api.postalpincode.in" service so the browser never
+    talks to a third-party origin directly (keeps the CORS/CSRF story simple).
+    """
+    import json
+    import urllib.request
+    from urllib.error import URLError
+
+    pin = (pin or "").strip()
+    if not (pin.isdigit() and len(pin) == 6):
+        raise HTTPException(status_code=400, detail="PIN code must be exactly 6 digits")
+
+    url = f"https://api.postalpincode.in/pincode/{pin}"
+    try:
+        with urllib.request.urlopen(url, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (URLError, TimeoutError, json.JSONDecodeError):
+        return schemas.PincodeLookupResponse(pin_code=pin, found=False)
+
+    # Response shape: [{"Status": "Success", "PostOffice": [ {...}, ... ]}]
+    if not isinstance(data, list) or not data or data[0].get("Status") != "Success":
+        return schemas.PincodeLookupResponse(pin_code=pin, found=False)
+
+    offices = data[0].get("PostOffice") or []
+    if not offices:
+        return schemas.PincodeLookupResponse(pin_code=pin, found=False)
+
+    first = offices[0]
+    areas = sorted({po.get("Name", "").strip() for po in offices if po.get("Name")})
+    return schemas.PincodeLookupResponse(
+        pin_code=pin,
+        country=first.get("Country") or "India",
+        state=first.get("State") or None,
+        district=first.get("District") or None,
+        city=first.get("District") or first.get("Block") or None,
+        areas=areas,
+        found=True,
+    )
+
+
 @router.post(
     "/register",
     response_model=schemas.UserOut,
@@ -102,6 +145,7 @@ def register(
         alternate_email=payload.alternate_email,
         pan_number=payload.pan_number,
         pin_code=payload.pin_code,
+        country=payload.country or "India",
         state=payload.state,
         district_name=payload.district_name,
         city=payload.city,

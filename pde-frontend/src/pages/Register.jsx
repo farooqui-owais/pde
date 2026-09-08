@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
@@ -7,13 +7,24 @@ import Footer from "../components/Footer.jsx";
 import { formatApiValidationError, validateRegistrationForm } from "../utils/validation.js";
 import "./Register.css";
 
+const CAPTCHA_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+const CAPTCHA_LEN = 6;
+
+function generateCaptcha() {
+  let out = "";
+  for (let i = 0; i < CAPTCHA_LEN; i++) {
+    out += CAPTCHA_CHARS[Math.floor(Math.random() * CAPTCHA_CHARS.length)];
+  }
+  return out;
+}
+
 const EMPTY = {
   title: "Mr.", first_name: "", middle_name: "", last_name: "",
   username: "", password: "", confirm_password: "",
   mobile_number: "", landline_number: "", email: "", alternate_email: "", pan_number: "",
-  pin_code: "", state: "", district_name: "", city: "",
-  house_no: "", building_name: "", road_street: "", area_locality: "",
-  security_question: "", security_answer: "",
+  pin_code: "", country: "India", state: "", district_name: "", city: "", area_locality: "",
+  house_no: "", building_name: "", road_street: "",
+  security_question: "", security_answer: "", captcha: "",
 };
 
 export default function Register() {
@@ -25,9 +36,75 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [usernameStatus, setUsernameStatus] = useState(null);
 
+  // CAPTCHA (client-side, same mechanism as Login/Forgot pages)
+  const [captcha, setCaptcha] = useState(generateCaptcha);
+
+  // Pincode-driven auto-fill of Country / State / City / Area
+  const [areaOptions, setAreaOptions] = useState([]);
+  // Standalone selection for the PIN-code "Area/Locality" dropdown. Deliberately
+  // kept OUT of `form` so it never touches the separate Address Details
+  // "Area/Locality" input (`form.area_locality`).
+  const [pinArea, setPinArea] = useState("");
+  const [pinStatus, setPinStatus] = useState(""); // "", "loading", "ok", "notfound", "error"
+  const lookupSeq = useRef(0);
+
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
+
+  function refreshCaptcha() {
+    setCaptcha(generateCaptcha());
+    setForm((f) => ({ ...f, captcha: "" }));
+  }
+
+  async function lookupPincode(pin) {
+    const seq = ++lookupSeq.current;
+    setPinStatus("loading");
+    try {
+      const { data } = await api.get("/api/auth/pincode-lookup", { params: { pin } });
+      if (seq !== lookupSeq.current) return; // a newer lookup superseded this one
+      if (!data.found) {
+        setPinStatus("notfound");
+        setAreaOptions([]);
+        return;
+      }
+      setPinStatus("ok");
+      setAreaOptions(data.areas || []);
+      // No placeholder option: default the dropdown to the first area value.
+      setPinArea((data.areas || [])[0] || "");
+      setForm((f) => ({
+        ...f,
+        country: data.country || "India",
+        state: data.state || "",
+        district_name: data.district || "",
+        city: data.city || "",
+      }));
+    } catch {
+      if (seq !== lookupSeq.current) return;
+      setPinStatus("error");
+      setAreaOptions([]);
+      setPinArea("");
+    }
+  }
+
+  function handlePinChange(value) {
+    const digits = value.replace(/\D/g, "").slice(0, 6);
+    update("pin_code", digits);
+    if (digits.length === 6) {
+      lookupPincode(digits);
+    } else {
+      lookupSeq.current++; // cancel any in-flight lookup
+      setPinStatus("");
+      setAreaOptions([]);
+      setPinArea("");
+    }
+  }
+
+  useEffect(() => {
+    // Re-fill for an already-complete pin (e.g. after Reset)
+    if (form.pin_code.length === 6 && !pinStatus) lookupPincode(form.pin_code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function checkUsername() {
     if (!form.username) return;
@@ -45,14 +122,22 @@ export default function Register() {
     const validationError = validateRegistrationForm(form);
     if (validationError) { setError(t(validationError)); return; }
 
+    // Validate the CAPTCHA client-side (case-insensitive), same as Login.
+    if (form.captcha.trim().toLowerCase() !== captcha.toLowerCase()) {
+      setError(t("auth:invalidCaptcha"));
+      refreshCaptcha();
+      return;
+    }
+
     setLoading(true);
     try {
-      const { confirm_password, ...payload } = form;
+      const { confirm_password, captcha: _captcha, ...payload } = form;
       await api.post("/api/auth/register", payload);
       setSuccess(t("auth:accountCreated"));
       setTimeout(() => navigate("/login"), 1200);
     } catch (err) {
       setError(formatApiValidationError(err?.response?.data?.detail, t) || t("auth:registrationFailed"));
+      refreshCaptcha();
     } finally {
       setLoading(false);
     }
@@ -79,6 +164,7 @@ export default function Register() {
                 <option>Mr.</option><option>Ms.</option><option>Mrs.</option>
               </select>
               <input placeholder={t("auth:firstNamePlaceholder")} value={form.first_name} onChange={(e) => update("first_name", e.target.value)} required />
+              <input placeholder={t("auth:middleNamePlaceholder")} value={form.middle_name} onChange={(e) => update("middle_name", e.target.value)} />
               <input placeholder={t("auth:lastNamePlaceholder")} value={form.last_name} onChange={(e) => update("last_name", e.target.value)} />
             </div>
 
@@ -130,19 +216,49 @@ export default function Register() {
             </div>
             <div className="reg-row-2">
               <label>{t("auth:pinCodeColon")}</label>
-              <input value={form.pin_code} onChange={(e) => update("pin_code", e.target.value)} required />
-              <span />
+              <input
+                value={form.pin_code}
+                onChange={(e) => handlePinChange(e.target.value)}
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="411001"
+                required
+              />
+              <span className="reg-pin-status">
+                {pinStatus === "loading" && t("auth:pinLookupLoading")}
+                {pinStatus === "notfound" && t("auth:pinLookupNotFound")}
+                {pinStatus === "error" && t("auth:pinLookupError")}
+              </span>
             </div>
 
-            <div className="reg-row-2">
-              <label></label>
-              <select value={form.state} onChange={(e) => update("state", e.target.value)}>
-                <option value="">{t("auth:selectState")}</option>
-                <option>Maharashtra</option>
+            <div className="reg-row-pair">
+              <label>{t("auth:countryColon")}</label>
+              <select value={form.country} onChange={(e) => update("country", e.target.value)} disabled={pinStatus === "loading"}>
+                <option value="">{t("auth:selectCountry")}</option>
+                <option>India</option>
               </select>
-              <select value={form.city} onChange={(e) => update("city", e.target.value)}>
+              <label>{t("auth:stateColon")}</label>
+              <select value={form.state} onChange={(e) => update("state", e.target.value)} disabled={pinStatus === "loading"}>
+                <option value="">{t("auth:selectState")}</option>
+                {form.state && <option>{form.state}</option>}
+              </select>
+            </div>
+
+            <div className="reg-row-pair">
+              <label>{t("auth:cityColon")}</label>
+              <select value={form.city} onChange={(e) => update("city", e.target.value)} disabled={pinStatus === "loading"}>
                 <option value="">{t("auth:selectCity")}</option>
-                <option>Pune</option>
+                {form.city && <option>{form.city}</option>}
+              </select>
+              <label>{t("auth:areaColon")}</label>
+              <select value={pinArea} onChange={(e) => setPinArea(e.target.value)}>
+                {areaOptions.length > 0 ? (
+                  areaOptions.map((a) => (
+                    <option key={a} value={a}>{a}</option>
+                  ))
+                ) : (
+                  <option value="">{t("auth:selectArea")}</option>
+                )}
               </select>
             </div>
 
@@ -158,11 +274,33 @@ export default function Register() {
               <input placeholder={t("auth:areaPlaceholder")} value={form.area_locality} onChange={(e) => update("area_locality", e.target.value)} />
             </div>
 
+            <div className="reg-row-2 reg-captcha-row">
+              <label>{t("auth:captchaColon")}</label>
+              <div className="reg-captcha-controls">
+                <span className="captcha-box">{captcha}</span>
+                <input
+                  placeholder={t("auth:captcha")}
+                  value={form.captcha}
+                  onChange={(e) => update("captcha", e.target.value)}
+                  required
+                  autoComplete="off"
+                />
+                <button type="button" className="captcha-refresh" title="Refresh CAPTCHA" onClick={refreshCaptcha}>&#8635;</button>
+              </div>
+              <span />
+            </div>
+
             <div className="reg-actions">
               <button className="btn btn-green" type="submit" disabled={loading}>
                 {loading ? t("common:saving") : t("common:save")}
               </button>
-              <button type="button" className="btn btn-red" onClick={() => setForm(EMPTY)}>{t("auth:reset")}</button>
+              <button
+                type="button"
+                className="btn btn-red"
+                onClick={() => { setForm(EMPTY); setPinStatus(""); setAreaOptions([]); setPinArea(""); refreshCaptcha(); }}
+              >
+                {t("auth:reset")}
+              </button>
             </div>
           </form>
         </div>

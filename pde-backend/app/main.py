@@ -24,6 +24,7 @@ def _ensure_additive_columns():
     """Add columns introduced after the first create_all on existing databases."""
     statements = [
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS country VARCHAR(60) DEFAULT 'India'",
         "ALTER TABLE entry_tokens ADD COLUMN IF NOT EXISTS access_password_hash VARCHAR(255)",
         "ALTER TABLE entry_tokens ADD COLUMN IF NOT EXISTS slot_booking_id VARCHAR(36)",
         # Gap 3: Property Details missing columns
@@ -105,6 +106,8 @@ def _ensure_additive_columns():
             add_col_sqlite("document_entries", "document_executed_in", "VARCHAR(60) DEFAULT 'India'")
             add_col_sqlite("registration_offices", "dig_name", "VARCHAR(150)")
             add_col_sqlite("registration_offices", "jdr_name", "VARCHAR(150)")
+            # Registration: pincode-driven Country/State/City/Area auto-fill
+            add_col_sqlite("users", "country", "VARCHAR(60) DEFAULT 'India'")
 
 
 def _init_db(max_attempts=15, retry_delay=1.0):

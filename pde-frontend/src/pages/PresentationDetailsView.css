@@ -1,0 +1,92 @@
+/* Presentation Details (read-only summary) page */
+
+.pdv-section {
+  border: 1px solid #b9c6d2;
+  border-radius: 6px;
+  margin-bottom: 18px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.pdv-section-title {
+  margin: 0;
+  padding: 8px 14px;
+  background: #eaf1f7;
+  border-bottom: 1px solid #b9c6d2;
+  font-size: 1rem;
+  color: #14456b;
+}
+
+.pdv-section-body {
+  padding: 0;
+}
+
+.pdv-subblock {
+  padding: 10px 14px;
+  border-bottom: 1px dashed #cfd8e0;
+}
+
+.pdv-subblock:last-child {
+  border-bottom: none;
+}
+
+.pdv-subtitle {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: #14456b;
+}
+
+.pdv-mini-title {
+  margin: 10px 0 6px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #5a6b7b;
+}
+
+.pdv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.pdv-table th,
+.pdv-table td {
+  border: 1px solid #d6dee6;
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pdv-table thead th {
+  background: #f4f8fb;
+  color: #14456b;
+}
+
+.pdv-table .pdv-label {
+  width: 220px;
+  background: #f8fafc;
+  font-weight: 600;
+  color: #32465a;
+}
+
+.pdv-table.pdv-bilingual .pdv-label {
+  width: 180px;
+}
+
+.pdv-mr {
+  font-family: "Noto Sans Devanagari", "Mangal", sans-serif;
+}
+
+.pdv-empty {
+  padding: 12px 14px;
+  color: #777;
+  font-size: 0.9rem;
+}
+
+@media print {
+  .pdv-section {
+    break-inside: avoid;
+    border-color: #888;
+  }
+}

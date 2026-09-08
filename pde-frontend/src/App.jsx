@@ -22,6 +22,7 @@ import DigitalDocumentSubmission from "./pages/DigitalDocumentSubmission.jsx";
 import SlotBooking from "./pages/SlotBooking.jsx";
 import ValuationRates from "./pages/ValuationRates.jsx";
 import PresentationDetails from "./pages/PresentationDetails.jsx";
+import PresentationDetailsView from "./pages/PresentationDetailsView.jsx";
 
 // Scheme Workflow Pages
 import SchemeDetails from "./pages/scheme/SchemeDetails.jsx";
@@ -197,6 +198,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DataEntryReport />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/entries/:id/details"
+        element={
+          <ProtectedRoute>
+            <PresentationDetailsView />
           </ProtectedRoute>
         }
       />
