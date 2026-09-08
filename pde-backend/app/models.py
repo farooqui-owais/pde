@@ -72,6 +72,11 @@ class User(Base):
     security_question = Column(String(200), nullable=True)
     security_answer_hash = Column(String(255), nullable=True)
 
+    # Google SSO: the `sub` claim of the verified Google ID token. NULL for
+    # classic username/password accounts (linking happens on first Google
+    # sign-in with the same verified email).
+    google_sub = Column(String(64), nullable=True, index=True)
+
     is_active = Column(Boolean, default=True)
     is_guest = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

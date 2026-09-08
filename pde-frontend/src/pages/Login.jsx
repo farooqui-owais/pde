@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderTeal from "../components/HeaderTeal.jsx";
 import Footer from "../components/Footer.jsx";
+import GoogleAuthButton from "../components/GoogleAuthButton.jsx";
 import "./Login.css";
 
 const MODULES = [
@@ -124,6 +125,7 @@ export default function Login() {
               <button type="button" className="btn btn-blue" onClick={() => navigate("/register")}>
                 {t("auth:createAccount")}
               </button>
+              <GoogleAuthButton mode="login" onError={setError} />
             </div>
           </div>
 

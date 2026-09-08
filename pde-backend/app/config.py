@@ -48,6 +48,11 @@ def get_settings() -> dict:
         "RATE_LIMIT_WINDOW_SECONDS": int(
             os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60")
         ),
+        # === Google SSO ===
+        # OAuth 2.0 Client ID from Google Cloud Console (Authorized JavaScript
+        # Origins must include the frontend origin). Empty => Google sign-in
+        # endpoints reject with a clear 503 and the feature stays disabled.
+        "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID", ""),
     }
 
 

@@ -105,6 +105,11 @@ class UsernameAvailability(BaseModel):
     available: bool
 
 
+class GoogleAuthRequest(BaseModel):
+    """Google Identity Services ID token ("credential") from the frontend."""
+    credential: str
+
+
 class PincodeLookupResponse(BaseModel):
     """Auto-fill payload returned for a 6-digit PIN code (India Post data)."""
     pin_code: str

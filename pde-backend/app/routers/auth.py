@@ -162,6 +162,98 @@ def register(
     return user
 
 
+@router.post("/google", response_model=schemas.Token)
+def google_auth(
+    payload: schemas.GoogleAuthRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(auth_rate_limit),
+):
+    """Sign in / sign up via Google SSO (Google Identity Services ID token).
+
+    Fully additive to the username/password flow: existing accounts are linked
+    by their verified Google email on first sign-in; new emails get an account
+    created automatically (no password — the Google identity is the credential).
+    """
+    import json
+    import time
+    import urllib.parse
+    import urllib.request
+    from urllib.error import URLError
+
+    client_id = get_settings().get("GOOGLE_CLIENT_ID", "")
+    if not client_id:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+
+    # Verify the ID token server-side against Google's tokeninfo endpoint
+    # (Google checks the JWS signature; we verify audience, email and expiry).
+    url = "https://oauth2.googleapis.com/tokeninfo?" + urllib.parse.urlencode(
+        {"id_token": payload.credential}
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=8) as resp:
+            claims = json.loads(resp.read().decode("utf-8"))
+    except (URLError, TimeoutError, json.JSONDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid Google credential")
+
+    if claims.get("aud") != client_id:
+        raise HTTPException(status_code=401, detail="Google credential was issued to another application")
+    if claims.get("email_verified") != "true" and claims.get("email_verified") is not True:
+        raise HTTPException(status_code=401, detail="Google account email is not verified")
+    try:
+        if int(claims.get("exp", "0")) < int(time.time()):
+            raise HTTPException(status_code=401, detail="Google credential has expired")
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google credential")
+
+    email = (claims.get("email") or "").strip().lower()
+    google_sub = claims.get("sub") or ""
+    if not email or not google_sub:
+        raise HTTPException(status_code=401, detail="Invalid Google credential")
+
+    # 1. Existing linked account
+    user = db.query(models.User).filter(models.User.google_sub == google_sub).first()
+
+    # 2. Same email, not yet linked -> link it (Google has verified the email).
+    if not user:
+        by_email = db.query(models.User).filter(models.User.email == email).first()
+        if by_email:
+            if by_email.google_sub and by_email.google_sub != google_sub:
+                raise HTTPException(status_code=409, detail="This email is linked to a different Google account")
+            by_email.google_sub = google_sub
+            user = by_email
+
+    # 3. New user -> auto-register from the Google profile.
+    if not user:
+        base_username = email.split("@")[0][:12] or "guser"
+        username = base_username
+        suffix = 1
+        while db.query(models.User).filter(models.User.username == username).first():
+            username = f"{base_username}{suffix}"[:60]
+            suffix += 1
+        user = models.User(
+            title="Mr.",
+            first_name=claims.get("given_name") or email.split("@")[0][:80],
+            last_name=claims.get("family_name"),
+            middle_name=None,
+            username=username,
+            # Unusable random password — sign-in is via Google only.
+            hashed_password=hash_password(secrets.token_urlsafe(32)),
+            mobile_number="0000000000",
+            email=email,
+            pin_code="000000",
+            country="India",
+            google_sub=google_sub,
+        )
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    # Same token shape as the classic login (sub = user.id).
+    access_token = create_access_token({"sub": user.id})
+    return schemas.Token(access_token=access_token, user=user)
+
+
 @router.post("/login", response_model=schemas.Token)
 def login(
     payload: schemas.LoginRequest,

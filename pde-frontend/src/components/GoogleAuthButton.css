@@ -1,0 +1,8 @@
+.google-auth { margin: 16px 0 0; }
+.google-auth-divider {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  color: #666; font-size: 12.5px;
+}
+.google-auth-divider::before,
+.google-auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--hairline, #ddd); }
+.google-auth-button { display: flex; justify-content: center; min-height: 44px; }

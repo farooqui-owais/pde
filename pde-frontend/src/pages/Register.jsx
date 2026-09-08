@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import api from "../api/axios.js";
 import HeaderTeal from "../components/HeaderTeal.jsx";
 import Footer from "../components/Footer.jsx";
+import GoogleAuthButton from "../components/GoogleAuthButton.jsx";
 import { formatApiValidationError, validateRegistrationForm } from "../utils/validation.js";
 import "./Register.css";
 
@@ -303,6 +304,8 @@ export default function Register() {
               </button>
             </div>
           </form>
+
+          <GoogleAuthButton mode="register" onError={setError} />
         </div>
       </div>
       <Footer copyright="Copyright \u00A9 (2026) National Informatics Centre, Pune" />
