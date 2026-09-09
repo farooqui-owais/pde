@@ -95,8 +95,10 @@ export default function PartyDetails() {
 
   // When the State changes, the City list is state-dependent, so clear it to
   // avoid keeping a city that doesn't belong to the newly-selected state.
+  // Both English AND Marathi city values are cleared together so the
+  // bilingual pair never goes out of sync.
   function handleStateChange(value) {
-    setForm((f) => ({ ...f, state_en: value, city_en: "" }));
+    setForm((f) => ({ ...f, state_en: value, city_en: "", city_mr: "" }));
   }
 
   async function verifyPan() {
