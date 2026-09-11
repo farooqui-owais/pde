@@ -59,6 +59,9 @@ Thumbs.db
 # Copy aws/parameters/dev.json.example -> aws/parameters/dev.json and fill in.
 aws/parameters/dev.json
 
+# Local uploads folder (user-uploaded files, never commit)
+pde-backend/uploads/
+
 # ---- Root-level docs/artifacts kept local only (not pushed to GitHub) ----
 # These are intentionally NOT tracked; they exist on disk locally.
 /DEPLOYMENT.md
@@ -84,3 +87,5 @@ aws/parameters/dev.json
 pde-antigravity-documentation
 # Local Netlify folder
 .netlify
+/netlify.toml
+/pde-frontend/netlify.toml
