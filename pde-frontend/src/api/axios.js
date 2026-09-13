@@ -2,7 +2,13 @@ import axios from "axios";
 
 // Base = the API origin (dev default). Pages call paths that include the
 // leading `/api` (e.g. `/api/auth/login`), so baseURL is the origin only.
-const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+// NOTE: uses ?? (nullish coalescing), not ||. In the k8s/prod nginx image,
+// VITE_API_BASE_URL is intentionally built as an empty string so axios
+// resolves requests relative to whatever origin served the page (nginx then
+// proxies /api/* to backend-svc in-cluster — see pde-frontend/nginx.conf).
+// "" is falsy but not nullish, so ?? preserves it; || would incorrectly
+// fall back to the localhost default and break that same-origin setup.
+const baseURL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 const api = axios.create({
   baseURL,

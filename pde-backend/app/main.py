@@ -2,6 +2,7 @@ import time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -174,6 +175,15 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "Accept", settings["CSRF_HEADER_NAME"]],
 )
 
+# Prometheus metrics: exposes GET /metrics (text format), matching the
+# pde-backend scrape job in monitoring/prometheus-values.yaml. GET-only, so
+# it passes CSRFProtectMiddleware (which only guards unsafe methods)
+# unchanged. excluded_handlers keeps /metrics itself out of its own request
+# histogram to avoid a self-referential noise metric.
+Instrumentator(excluded_handlers=["/metrics"]).instrument(app).expose(
+    app, endpoint="/metrics", include_in_schema=False
+)
+
 app.include_router(auth.router)
 app.include_router(tokens.router)
 app.include_router(documents.router)
@@ -198,3 +208,18 @@ app.include_router(digital_submission.router)
 @app.get("/api/health")
 def health():
     return {"status": "ok", "service": "dakhalnama-api"}
+
+
+@app.get("/api/health/deep")
+def health_deep():
+    """Deploy gate: verifies the API process AND its database connection.
+
+    The CI/CD release script (deploy/release.sh) polls this after switching the
+    `current` release symlink. A 200 here means the new release is genuinely
+    serving requests against a reachable DB; anything else triggers an automatic
+    rollback to the previous release. Kept as a GET so it passes the CSRF and
+    security middleware unchanged.
+    """
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    return {"status": "ok", "db": "ok"}

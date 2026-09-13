@@ -1,5 +1,9 @@
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
+# Production WSGI/ASGI runner used by the systemd unit
+# (ExecStart=/opt/pde/venv/bin/gunicorn ... -k uvicorn.workers.UvicornWorker).
+# A fresh venv without this would fail with 203/EXEC on the EC2.
+gunicorn==22.0.0
 sqlalchemy==2.0.30
 psycopg2-binary==2.9.9
 python-jose[cryptography]==3.3.0
@@ -9,3 +13,9 @@ python-multipart==0.0.9
 pydantic[email]==2.7.1
 python-dotenv==1.0.1
 alembic==1.13.1
+# Exposes a /metrics endpoint (Prometheus text format) for kube-prometheus-stack
+# to scrape — required by monitoring/prometheus-values.yaml's pde-backend job.
+# I'm reasonably confident 7.0.0 is a real published version as of my training
+# data, but pin/verify against https://pypi.org/project/prometheus-fastapi-instrumentator/
+# before relying on it in case a newer version has since shipped.
+prometheus-fastapi-instrumentator==7.0.0

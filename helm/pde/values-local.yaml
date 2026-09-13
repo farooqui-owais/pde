@@ -1,0 +1,86 @@
+# =============================================================================
+# Local overrides — kind cluster + local Docker registry (localhost:5000) +
+# ingress-nginx + ArgoCD GitOps loop. No cloud account of any kind involved.
+#
+# Use with:
+#   helm upgrade --install pde ./helm/pde -n pde --create-namespace \
+#     -f helm/pde/values-local.yaml
+#
+# In the ArgoCD-driven flow, this file is the one referenced by
+# local-k8s/argocd/application.yaml's valueFiles — Jenkins only edits the two
+# image.tag lines below on each successful build.
+# =============================================================================
+global:
+  namespace: pde
+
+backend:
+  replicaCount: 1
+  image:
+    # "localhost:5000" here is resolved on your host machine; the cluster
+    # nodes resolve the same name via the containerd mirror configured in
+    # local-k8s/kind-config.yaml (-> http://kind-registry:5000). Both paths
+    # land on the same registry container.
+    repository: localhost:5000/pde/backend
+    tag: dev
+    # Always, not IfNotPresent/Never: the tag is reused/mutated by CI runs
+    # during practice, and kind's containerd should re-pull from the local
+    # registry rather than caching a stale image with the same tag.
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+  env:
+    DEBUG: "True"
+    DATABASE_URL: "postgresql://postgres:postgres@postgres-svc.pde.svc.cluster.local:5432/pde"
+    # Frontend is served same-origin via ingress + nginx's /api proxy, so the
+    # browser never sends a cross-origin request — CORS_ORIGINS below is a
+    # fallback for hitting the API directly (e.g. curl, /docs) rather than
+    # something the app depends on in normal use.
+    CORS_ORIGINS: "http://pde.local,http://localhost"
+    CSRF_COOKIE_SECURE: "False"
+    CSRF_COOKIE_SAMESITE: "lax"
+    TRUSTED_HOSTS: "*"
+    ACCESS_TOKEN_EXPIRE_MINUTES: "120"
+    RATE_LIMIT_MAX: "8"
+    RATE_LIMIT_WINDOW_SECONDS: "60"
+    # DEMO-ONLY secret — fine for a throwaway local cluster, never reuse it
+    # anywhere real. Generate a proper one with:
+    #   python -c "import secrets; print(secrets.token_urlsafe(64))"
+    SECRET_KEY: "dev-only-local-k8s-secret-not-for-production"
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: localhost:5000/pde/frontend
+    tag: dev
+    pullPolicy: Always
+  autoscaling:
+    enabled: false
+
+# ---------- Ingress (ingress-nginx on kind, not AWS ALB) ----------
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts:
+    - paths:
+        - path: /api
+          pathType: Prefix
+          service: backend
+        - path: /
+          pathType: Prefix
+          service: frontend
+  tls: []
+
+# ---------- In-cluster PostgreSQL (dev only, matches docker-compose creds) ----------
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  storage: 1Gi
+  password: postgres

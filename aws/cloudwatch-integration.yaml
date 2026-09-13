@@ -1,0 +1,160 @@
+# =============================================================================
+# PDE — CloudWatch Integration for EKS
+#
+# Deploys FluentBit as a DaemonSet to ship container logs to CloudWatch,
+# and configures CloudWatch alarms for EKS resources.
+#
+# PREREQUISITES:
+#   - EKS cluster with node IAM role having CloudWatchAgentServerPolicy
+#
+# DEPLOY:
+#   1. Enable Container Insights:
+#      aws eks update-cluster-config --name pde-cluster \
+#        --logging '{"clusterLogging":[{"types":["api","audit","authenticator","controllerManager","scheduler"],"enabled":true}]}'
+#
+#   2. Install FluentBit:
+#      kubectl apply -f aws/cloudwatch-integration.yaml
+#
+#   3. Deploy CloudWatch alarms (separate CFN stack):
+#      aws cloudformation deploy \
+#        --stack-name pde-eks-monitoring \
+#        --template-file aws/cloudwatch-alarms-eks.yaml \
+#        --region ap-south-1
+# =============================================================================
+
+# ---------- FluentBit Namespace ----------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amazon-cloudwatch
+  labels:
+    name: amazon-cloudwatch
+---
+# ---------- FluentBit ConfigMap ----------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: amazon-cloudwatch
+  labels:
+    app.kubernetes.io/name: fluent-bit
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         5
+        Log_Level     info
+        Daemon        off
+        Parsers_File  parsers.conf
+
+    [INPUT]
+        Name              tail
+        Tag               kube.*
+        Path              /var/log/containers/pde-*.log
+        Parser            docker
+        DB                /var/log/flb_kube.db
+        Mem_Buf_Limit     5MB
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_Tag_Prefix     kube.var.log.containers.
+        Merge_Log           On
+        Keep_Log            Off
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude Off
+
+    [OUTPUT]
+        Name                cloudwatch_logs
+        Match               kube.*
+        region              ap-south-1
+        log_group_name      /eks/pde-cluster/application
+        log_stream_prefix   pde-
+        auto_create_group   true
+        log_retention_days  14
+
+  parsers.conf: |
+    [PARSER]
+        Name        docker
+        Format      json
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%LZ
+---
+# ---------- FluentBit ServiceAccount ----------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluent-bit
+  namespace: amazon-cloudwatch
+---
+# ---------- FluentBit ClusterRole ----------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluent-bit
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, pods/log]
+    verbs: [get, list, watch]
+---
+# ---------- FluentBit ClusterRoleBinding ----------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluent-bit
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluent-bit
+subjects:
+  - kind: ServiceAccount
+    name: fluent-bit
+    namespace: amazon-cloudwatch
+---
+# ---------- FluentBit DaemonSet ----------
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: amazon-cloudwatch
+  labels:
+    app.kubernetes.io/name: fluent-bit
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fluent-bit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fluent-bit
+    spec:
+      serviceAccountName: fluent-bit
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: fluent-bit
+          image: amazon/aws-for-fluent-bit:2.32.0
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: config
+              mountPath: /fluent-bit/etc/
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: config
+          configMap:
+            name: fluent-bit-config

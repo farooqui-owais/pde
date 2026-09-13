@@ -1,0 +1,58 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "title": "CPU Usage by Pod",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{
+        "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"pde\", container!=\"\"}[5m])) by (pod)",
+        "legendFormat": "{{ pod }}"
+      }]
+    },
+    {
+      "title": "Memory Usage by Pod (MB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{
+        "expr": "sum(container_memory_working_set_bytes{namespace=\"pde\", container!=\"\"}) by (pod) / 1024 / 1024",
+        "legendFormat": "{{ pod }}"
+      }]
+    },
+    {
+      "title": "CPU Requests vs Limits vs Actual",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "sum(kube_pod_container_resource_requests{namespace=\"pde\", resource=\"cpu\"}) by (container)", "legendFormat": "{{ container }} request" },
+        { "expr": "sum(kube_pod_container_resource_limits{namespace=\"pde\", resource=\"cpu\"}) by (container)", "legendFormat": "{{ container }} limit" },
+        { "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"pde\", container!=\"\"}[5m])) by (container)", "legendFormat": "{{ container }} actual" }
+      ]
+    },
+    {
+      "title": "Network I/O (bytes/sec)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"pde\"}[5m])) by (pod)", "legendFormat": "{{ pod }} rx" },
+        { "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"pde\"}[5m])) by (pod)", "legendFormat": "{{ pod }} tx" }
+      ]
+    },
+    {
+      "title": "HPA Current vs Desired Replicas",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"pde\"}", "legendFormat": "{{ horizontalpodautoscaler }} current" },
+        { "expr": "kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"pde\"}", "legendFormat": "{{ horizontalpodautoscaler }} desired" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["pde", "resources"],
+  "time": { "from": "now-3h", "to": "now" },
+  "title": "PDE Resource Utilization",
+  "uid": "pde-resources",
+  "version": 1
+}

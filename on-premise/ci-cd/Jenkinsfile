@@ -1,0 +1,69 @@
+pipeline {
+    agent any
+
+    environment {
+        ONPREMISE_DIR = 'on-premise'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Backend Quality Gate') {
+            steps {
+                dir('pde-backend') {
+                    sh '''
+                        python3 -m venv .venv
+                        . .venv/bin/activate
+                        pip install -r requirements-dev.txt
+                        ruff check app/
+                        pytest tests/ --cov=app -v
+                    '''
+                }
+            }
+        }
+
+        stage('Frontend Quality Gate') {
+            steps {
+                dir('pde-frontend') {
+                    sh '''
+                        npm ci
+                        npm run lint || true
+                        npm run build
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to On-Premise') {
+            steps {
+                dir("${env.ONPREMISE_DIR}") {
+                    sh 'bash scripts/deploy.sh'
+                }
+            }
+        }
+
+        stage('Health & Smoke Verification') {
+            steps {
+                dir("${env.ONPREMISE_DIR}") {
+                    sh 'bash scripts/healthcheck.sh'
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Deployment failed! Reverting..."
+            dir("${env.ONPREMISE_DIR}") {
+                sh 'bash scripts/rollback.sh'
+            }
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

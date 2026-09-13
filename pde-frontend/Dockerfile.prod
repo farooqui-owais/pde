@@ -1,0 +1,40 @@
+# =============================================================================
+# PDE Frontend — Production Image (multi-stage)
+#
+# Used by the k8s/Helm/ArgoCD path (helm/pde/templates/frontend-deployment.yaml
+# expects port 80 + /nginx-health — this Dockerfile is what actually produces
+# that image). The plain `Dockerfile` in this folder is unchanged and stays a
+# separate, simpler dev-server image for `docker compose up` (port 5173).
+#
+# Build:
+#   docker build -f Dockerfile.prod -t <repo>/pde-frontend:<tag> .
+#
+# VITE_API_BASE_URL is baked in at BUILD time (Vite inlines env vars into the
+# static bundle — there is no "runtime env" for a static SPA). It defaults to
+# "" (empty) here on purpose: nginx.conf proxies /api/* to backend-svc inside
+# the cluster, so the browser only ever talks to whatever origin served the
+# page. Override with --build-arg VITE_API_BASE_URL=https://something if you
+# ever need the frontend to call a *different* origin than the one serving it.
+# =============================================================================
+
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY . .
+
+ARG VITE_API_BASE_URL=""
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+RUN npm run build
+
+FROM nginx:1.27-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://127.0.0.1/nginx-health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,0 +1,17 @@
+# Bandit configuration for PDE backend
+skips:
+  # B101: assert used — acceptable in test files
+  - B101
+  # B104: binding to 0.0.0.0 — expected in containerized apps
+  - B104
+
+exclude_dirs:
+  - tests
+  - __pycache__
+  - .pytest_cache
+
+assert_used:
+  skips: []
+  excludes:
+    - '*_test.py'
+    - 'test_*.py'

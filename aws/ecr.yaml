@@ -1,0 +1,122 @@
+# =============================================================================
+# PDE — Amazon ECR Repositories
+#
+# Creates container image repositories for backend and frontend.
+#
+# DEPLOY:
+#   aws cloudformation deploy \
+#     --stack-name pde-ecr \
+#     --template-file aws/ecr.yaml \
+#     --region ap-south-1
+# =============================================================================
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ECR repositories for PDE container images
+
+Resources:
+  BackendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: pde/backend
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 tagged images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["sha-"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Expire untagged images after 7 days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 7
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: PDE
+        - Key: Component
+          Value: backend
+
+  FrontendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: pde/frontend
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 tagged images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["sha-"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Expire untagged images after 7 days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 7
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: PDE
+        - Key: Component
+          Value: frontend
+
+Outputs:
+  BackendRepoUri:
+    Description: Backend ECR repository URI
+    Value: !GetAtt BackendRepository.RepositoryUri
+  FrontendRepoUri:
+    Description: Frontend ECR repository URI
+    Value: !GetAtt FrontendRepository.RepositoryUri
+  BackendRepoArn:
+    Description: Backend ECR repository ARN
+    Value: !GetAtt BackendRepository.Arn
+  FrontendRepoArn:
+    Description: Frontend ECR repository ARN
+    Value: !GetAtt FrontendRepository.Arn

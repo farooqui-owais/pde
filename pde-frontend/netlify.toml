@@ -9,6 +9,10 @@
 
 [build.environment]
   VITE_API_BASE_URL = "/"
+  # Google SSO client ID (public — it ships inside the JS bundle).
+  # Also add the Netlify site URL (e.g. https://your-site.netlify.app) as an
+  # "Authorized JavaScript origin" on this client in Google Cloud Console.
+  VITE_GOOGLE_CLIENT_ID = "629998969607-noa9it2d58a94rhb8jrgidnh48qbcvcj.apps.googleusercontent.com"
 
 # Proxy API calls to your Render backend so the browser only talks to Netlify
 # (same-origin => no CORS, and CSRF/cookies behave like the AWS setup).

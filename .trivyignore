@@ -1,0 +1,4 @@
+# Trivy ignore file for PDE
+# Add CVE IDs here to suppress known false positives
+# Format: one CVE per line
+# Example: CVE-2023-XXXXX

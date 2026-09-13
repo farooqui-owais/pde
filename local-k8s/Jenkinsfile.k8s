@@ -1,0 +1,117 @@
+// =============================================================================
+// PDE — local Kubernetes + GitOps pipeline (kind + local registry + ArgoCD)
+//
+// This is a SEPARATE pipeline from on-premise/ci-cd/Jenkinsfile, which
+// deploys via systemd/docker-compose and is left untouched. This one targets
+// the helm/pde chart + ArgoCD flow described in local-k8s/README.md.
+//
+// Jenkins does NOT talk to the kind cluster directly to deploy — it only:
+//   1. runs quality gates
+//   2. builds + pushes images to the local registry
+//   3. bumps the two image.tag lines in helm/pde/values-local.yaml
+//   4. commits + pushes that change back to the git repo
+// ArgoCD (already watching that repo) detects the commit and syncs the
+// cluster itself. That handoff is the actual "GitOps" part — Jenkins never
+// runs `helm upgrade` or `kubectl apply` for the app itself.
+//
+// SETUP NOTES (see local-k8s/README.md for the full walkthrough):
+// - Run this Jenkins container with the Docker socket mounted
+//   (-v /var/run/docker.sock:/var/run/docker.sock) so `docker build`/`push`
+//   below work, and with network access to localhost:5000 (the local
+//   registry) and to your git remote.
+// - Add a Jenkins credential (git-creds, "Username with password" or SSH)
+//   with push access to the repo this pipeline checks out from.
+// - GIT_REPO_URL below should be YOUR remote (GitHub/GitLab/local Gitea —
+//   see local-k8s/README.md §6 for a fully-offline Gitea option).
+// =============================================================================
+pipeline {
+    agent any
+
+    environment {
+        REGISTRY = "localhost:5000"
+        IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'local'}"
+        GIT_REPO_URL = "https://github.com/farooqui-owais/pde.git" // e.g. git@github.com:you/PDE.git
+        GIT_CREDENTIALS_ID = "git-creds"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Backend Quality Gate') {
+            steps {
+                dir('pde-backend') {
+                    sh '''
+                        python3 -m venv .venv
+                        . .venv/bin/activate
+                        pip install -r requirements-dev.txt
+                        ruff check app/
+                        pytest tests/ --cov=app -v
+                    '''
+                }
+            }
+        }
+
+        stage('Frontend Quality Gate') {
+            steps {
+                dir('pde-frontend') {
+                    sh '''
+                        npm ci
+                        npm run lint || true
+                        npm run build
+                    '''
+                }
+            }
+        }
+
+        stage('Build & Push Images') {
+            steps {
+                sh """
+                    docker build -t ${REGISTRY}/pde/backend:${IMAGE_TAG} pde-backend
+                    docker push ${REGISTRY}/pde/backend:${IMAGE_TAG}
+
+                    docker build -f pde-frontend/Dockerfile.prod \
+                        -t ${REGISTRY}/pde/frontend:${IMAGE_TAG} pde-frontend
+                    docker push ${REGISTRY}/pde/frontend:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Bump image tags for ArgoCD') {
+            steps {
+                dir('helm/pde') {
+                    // sed, not yq, so this stage has zero extra binary
+                    // dependencies on the Jenkins agent beyond coreutils.
+                    sh """
+                        sed -i "s/^\\(\\s*tag:\\).*/\\1 ${IMAGE_TAG}/" values-local.yaml
+                    """
+                }
+                sh """
+                    git config user.email 'jenkins@pde.local'
+                    git config user.name 'jenkins-ci'
+                    git add helm/pde/values-local.yaml
+                    git commit -m "ci: bump PDE image tags to ${IMAGE_TAG} [skip ci]" || echo "Nothing to commit"
+                """
+                withCredentials([usernamePassword(credentialsId: "${GIT_CREDENTIALS_ID}",
+                                                    usernameVariable: 'GIT_USER',
+                                                    passwordVariable: 'GIT_TOKEN')]) {
+                    sh """
+                        git push ${GIT_REPO_URL} HEAD:main
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pushed ${REGISTRY}/pde/{backend,frontend}:${IMAGE_TAG} and bumped values-local.yaml — ArgoCD will sync automatically."
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

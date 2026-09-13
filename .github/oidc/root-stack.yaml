@@ -79,6 +79,32 @@ Resources:
                 Effect: Allow
                 Action: ["ssm:SendCommand"]
                 Resource: "*"
+              - Sid: ECRAuth
+                Effect: Allow
+                Action: ["ecr:GetAuthorizationToken"]
+                Resource: "*"
+              - Sid: ECRPush
+                Effect: Allow
+                Action:
+                  - "ecr:BatchCheckLayerAvailability"
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                  - "ecr:PutImage"
+                  - "ecr:InitiateLayerUpload"
+                  - "ecr:UploadLayerPart"
+                  - "ecr:CompleteLayerUpload"
+                  - "ecr:DescribeImages"
+                Resource: "arn:aws:ecr:ap-south-1:967501764038:repository/pde/*"
+              - Sid: EKSAccess
+                Effect: Allow
+                Action:
+                  - "eks:DescribeCluster"
+                  - "eks:ListClusters"
+                Resource: "*"
+              - Sid: EKSDeploy
+                Effect: Allow
+                Action: ["sts:AssumeRole"]
+                Resource: "arn:aws:iam::967501764038:role/github-actions-eks"
 
 Outputs:
   RoleArn:

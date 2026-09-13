@@ -1,0 +1,63 @@
+# Backend (FastAPI): a Deployment scaled to 2 replicas + a LoadBalancer Service.
+# Docker Desktop's built-in Kubernetes maps LoadBalancer to 127.0.0.1, so the
+# API is reachable from the host at http://localhost:8000.
+#
+# The image is built from ./pde-backend/Dockerfile and tagged pde/backend:latest.
+# Because Docker Desktop's cluster shares the same daemon that builds the image,
+# imagePullPolicy: IfNotPresent lets it run without pushing to a registry.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: pde
+  labels:
+    app: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: pde/backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secret
+          # /api/health is a CSRF-exempt, GET endpoint -> safe as a probe.
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-svc
+  namespace: pde
+spec:
+  type: LoadBalancer
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

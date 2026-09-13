@@ -1,0 +1,97 @@
+name: Build & Push to ECR
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: 'Deployment environment (staging or production)'
+    outputs:
+      backend-image:
+        description: 'Full backend image URI with tag'
+        value: ${{ jobs.build.outputs.backend-image }}
+      frontend-image:
+        description: 'Full frontend image URI with tag'
+        value: ${{ jobs.build.outputs.frontend-image }}
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: 967501764038.dkr.ecr.ap-south-1.amazonaws.com
+
+jobs:
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      backend-image: ${{ steps.meta-backend.outputs.image }}
+      frontend-image: ${{ steps.meta-frontend.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::967501764038:role/github-actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tags
+        id: tags
+        run: |
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "sha_tag=sha-${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "date_tag=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Build & push backend image
+        id: meta-backend
+        run: |
+          IMAGE="$ECR_REGISTRY/pde/backend"
+          TAG="${{ steps.tags.outputs.sha_tag }}"
+          docker build \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --label "org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            -t "$IMAGE:$TAG" \
+            -t "$IMAGE:latest" \
+            ./pde-backend
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+          echo "image=$IMAGE:$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build & push frontend image
+        id: meta-frontend
+        run: |
+          IMAGE="$ECR_REGISTRY/pde/frontend"
+          TAG="${{ steps.tags.outputs.sha_tag }}"
+          docker build \
+            --build-arg VITE_API_BASE_URL=/ \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --label "org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            -t "$IMAGE:$TAG" \
+            -t "$IMAGE:latest" \
+            ./pde-frontend
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+          echo "image=$IMAGE:$TAG" >> $GITHUB_OUTPUT
+
+      - name: Scan backend image with Trivy
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: '${{ steps.meta-backend.outputs.image }}'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Scan frontend image with Trivy
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: '${{ steps.meta-frontend.outputs.image }}'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'

@@ -2,6 +2,12 @@
 # Root .gitignore — used if this becomes a single monorepo repo.
 # The frontend also has its own .gitignore (pde-frontend/.gitignore)
 # because it is pushed to GitHub as a standalone repo.
+#
+# UPDATED: this repo now actively uses Docker/Kubernetes/Helm/Jenkins/
+# ArgoCD (see local-k8s/) alongside the existing on-premise and
+# Render/Netlify/EKS paths — multiple deployment strategies live side
+# by side here on purpose. The old "Docker/K8s not needed for plain
+# deploy" assumption no longer holds, so those files are tracked now.
 # ================================================================
 
 # ---- Python (backend) ----
@@ -15,6 +21,9 @@ env/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # --- environment files: NEVER commit real secrets, keep templates ---
 .env
@@ -42,6 +51,13 @@ coverage/
 *.tar.gz
 *.zip
 
+# ---- Helm ----
+# Chart.lock IS tracked on purpose (like package-lock.json) — pins
+# subchart/dependency versions. Only the fetched dependency archives
+# and extracted subchart folders are junk.
+helm/**/charts/
+*.tgz
+
 # ---- Editor / OS ----
 .vscode/*
 !.vscode/extensions.json
@@ -59,8 +75,21 @@ Thumbs.db
 # Copy aws/parameters/dev.json.example -> aws/parameters/dev.json and fill in.
 aws/parameters/dev.json
 
+# ---- Local Kubernetes/CI artifacts (kind + Jenkins) ----
+# kubeconfigs occasionally get exported to a file for debugging — never
+# commit one (it can contain cluster auth data on some setups).
+kubeconfig*.yaml
+kubeconfig*.yml
+*.kubeconfig
+# `helm template`/`helm get manifest` output people sometimes redirect
+# here while debugging a chart — not a source file, don't track it.
+/local-k8s/rendered/
+
 # Local uploads folder (user-uploaded files, never commit)
 pde-backend/uploads/
+
+# Local DB override, never needed outside the author's machine
+pde-backend/app/database.local.py
 
 # ---- Root-level docs/artifacts kept local only (not pushed to GitHub) ----
 # These are intentionally NOT tracked; they exist on disk locally.
@@ -71,21 +100,13 @@ pde-backend/uploads/
 /REUSABLE_PROJECT_PROMPT.md
 /iSarita_PDE_Manual_Extract_for_Antigravity.md
 /iSaritaPublicDataEntry_UserManual.pdf
+# Working notes from the local-k8s CI/CD build-out — confirm you actually
+# want these local-only rather than committed; GAP_ANALYSIS in particular
+# reads like real documentation someone else on the team might want.
+/GAP_ANALYSIS_AND_IMPLEMENTATION.md
+/cmd-k8s.md
 
-# ---- Docker / Kubernetes artifacts (NOT needed for the plain deploy) ----
-# The recommended, simplest deployment is `deploy/deploy-plain.sh`
-# (plain services: PostgreSQL + FastAPI/gunicorn + nginx; no Docker/K8s).
-# These files are kept only as reference on disk; they are untracked.
-/docker-compose.yml
-/k8s/
-/pde-backend/Dockerfile
-/pde-backend/.dockerignore
-/pde-backend/docker.md
-/pde-frontend/Dockerfile
-/pde-frontend/.dockerignore
-/pde-backend/app/database.local.py
 pde-antigravity-documentation
-# Local Netlify folder
+
+# Local Netlify folder (the .netlify CLI cache — always local/machine-specific)
 .netlify
-/netlify.toml
-/pde-frontend/netlify.toml

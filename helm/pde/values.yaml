@@ -1,0 +1,126 @@
+# =============================================================================
+# PDE Helm Chart — Default Values
+# Override per environment via values-{env}.yaml
+# =============================================================================
+
+global:
+  namespace: pde
+
+# ---------- Backend ----------
+backend:
+  replicaCount: 2
+  image:
+    repository: 967501764038.dkr.ecr.ap-south-1.amazonaws.com/pde/backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  probes:
+    liveness:
+      path: /api/health
+      initialDelaySeconds: 30
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /api/health
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    startup:
+      path: /api/health
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      failureThreshold: 30
+  env:
+    DEBUG: "False"
+    ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+    CSRF_COOKIE_SECURE: "True"
+    RATE_LIMIT_MAX: "8"
+    RATE_LIMIT_WINDOW_SECONDS: "60"
+  # Secrets from AWS Secrets Manager via ExternalSecret
+  externalSecrets:
+    enabled: false
+    secretStoreRef: aws-secrets-manager
+    remoteRef: pde/production
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+# ---------- Frontend ----------
+frontend:
+  replicaCount: 1
+  image:
+    repository: 967501764038.dkr.ecr.ap-south-1.amazonaws.com/pde/frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+# ---------- Ingress (AWS ALB) ----------
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+  hosts:
+    - paths:
+        - path: /api
+          pathType: Prefix
+          service: backend
+        - path: /
+          pathType: Prefix
+          service: frontend
+  tls: []
+
+# ---------- Service Account (IRSA) ----------
+serviceAccount:
+  create: true
+  name: pde-app
+  annotations: {}
+# ---------- PostgreSQL (dev only) ----------
+postgres:
+  enabled: false
+  storage: "1Gi"
+  image: "postgres:16-alpine"
+  password: "postgres"

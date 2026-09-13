@@ -1,0 +1,58 @@
+# Production environment overrides
+global:
+  namespace: pde
+
+backend:
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  env:
+    DEBUG: "False"
+    CSRF_COOKIE_SECURE: "True"
+    RATE_LIMIT_MAX: "8"
+    RATE_LIMIT_WINDOW_SECONDS: "60"
+  externalSecrets:
+    enabled: true
+    remoteRef: pde/production
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+frontend:
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+ingress:
+  enabled: true
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    # Uncomment and set when ACM certificate is provisioned
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:967501764038:certificate/REPLACE
+  hosts:
+    - paths:
+        - path: /api
+          pathType: Prefix
+          service: backend
+        - path: /
+          pathType: Prefix
+          service: frontend
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::967501764038:role/pde-app-role

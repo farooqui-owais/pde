@@ -1,0 +1,74 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{namespace=\"pde\"}[5m])) by (method)",
+        "legendFormat": "{{ method }}"
+      }]
+    },
+    {
+      "title": "Error Rate (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{namespace=\"pde\", status=~\"5..\"}[5m])) / sum(rate(http_requests_total{namespace=\"pde\"}[5m])) * 100",
+        "legendFormat": "5xx rate %"
+      }]
+    },
+    {
+      "title": "Response Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{namespace=\"pde\"}[5m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=\"pde\"}[5m])) by (le))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace=\"pde\"}[5m])) by (le))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "title": "Active Requests",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [{
+        "expr": "sum(http_requests_in_progress{namespace=\"pde\"})",
+        "legendFormat": "In-flight"
+      }]
+    },
+    {
+      "title": "Pod Count by Status",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [{
+        "expr": "sum(kube_pod_status_phase{namespace=\"pde\"}) by (phase)",
+        "legendFormat": "{{ phase }}"
+      }]
+    },
+    {
+      "title": "Pod Restarts",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [{
+        "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"pde\"}[1h])) by (pod)",
+        "legendFormat": "{{ pod }}"
+      }]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["pde", "backend"],
+  "templating": { "list": [] },
+  "time": { "from": "now-3h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "PDE Application Overview",
+  "uid": "pde-overview",
+  "version": 1
+}

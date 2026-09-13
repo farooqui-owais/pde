@@ -1,0 +1,37 @@
+# =============================================================================
+# kind cluster config for PDE local dev + CI/CD practice
+#
+# Create with:
+#   kind create cluster --name pde-dev --config local-k8s/kind-config.yaml
+#
+# containerdConfigPatches wires the cluster to trust a local insecure
+# registry at localhost:5000 — this is the official kind pattern for a
+# "local registry" (see kind.sigs.k8s.io/docs/user/local-registry). It lets
+# every node pull `localhost:5000/pde/backend:<tag>` images that Jenkins
+# pushed from the host, with no cloud registry (ECR/Docker Hub) involved.
+# =============================================================================
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: pde-dev
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # ingress-nginx (installed separately) binds NodePort 80/443 on this
+      # node; these mappings expose them on the host as plain 80/443 so
+      # http://pde.local just works without a port number.
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
+      endpoint = ["http://kind-registry:5000"]

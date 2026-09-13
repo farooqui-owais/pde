@@ -1,0 +1,48 @@
+# =============================================================================
+# ArgoCD Application — PDE (local dev)
+#
+# Apply once, after ArgoCD is installed and this repo has a git remote it can
+# reach (repoURL below):
+#   kubectl apply -f local-k8s/argocd/application.yaml
+#
+# From then on: any commit that changes helm/pde/** on the `main` branch
+# (e.g. Jenkins bumping image.tag in values-local.yaml) is auto-synced to the
+# `pde` namespace within ~3 minutes (ArgoCD's default poll interval), or
+# instantly if you configure a git webhook to ArgoCD's /api/webhook endpoint.
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pde
+  namespace: argocd
+  finalizers:
+    # Ensures `kubectl delete -f application.yaml` also cleans up everything
+    # ArgoCD deployed for this app, instead of leaving orphaned resources.
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    # REPLACE with your actual remote — GitHub/GitLab (private is fine, add a
+    # repo credential in ArgoCD for that) or a fully local Gitea instance.
+    # See local-k8s/README.md §6 for the no-cloud Gitea option.
+    repoURL: https://github.com/farooqui-owais/pde.git
+    targetRevision: main
+    path: helm/pde
+    helm:
+      valueFiles:
+        - values-local.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pde
+  syncPolicy:
+    automated:
+      prune: true # remove resources deleted from the chart
+      selfHeal: true # revert manual kubectl edits back to git state
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

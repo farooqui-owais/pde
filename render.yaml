@@ -1,0 +1,59 @@
+# =============================================================================
+# DakhalNama / PDE — Render Infrastructure as Code (Blueprint)
+# Defines:
+#   1. PostgreSQL Managed Database
+#   2. FastAPI Backend Web Service
+# =============================================================================
+services:
+  # ---------------------------------------------------------------------------
+  # Backend API Web Service
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: pde-backend
+    runtime: python
+    rootDir: pde-backend
+    plan: starter
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:$PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pde-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: APP_NAME
+        value: "DakhalNama PDE API"
+      - key: APP_VERSION
+        value: "1.0.0"
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "120"
+      # IMPORTANT: Replace with your actual Netlify frontend domain
+      - key: CORS_ORIGINS
+        value: "https://your-pde-site.netlify.app"
+      # For cross-site frontend (Netlify) & backend (Render), Secure + None are required
+      - key: CSRF_COOKIE_SECURE
+        value: "True"
+      - key: CSRF_COOKIE_SAMESITE
+        value: "none"
+      - key: TRUSTED_HOSTS
+        value: "*"
+      - key: RATE_LIMIT_MAX
+        value: "20"
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+
+# -----------------------------------------------------------------------------
+# Managed PostgreSQL Database
+# -----------------------------------------------------------------------------
+databases:
+  - name: pde-db
+    databaseName: dakhalnama
+    user: dakhal_user
+    plan: starter
+    region: oregon
+    postgresMajorVersion: "16"

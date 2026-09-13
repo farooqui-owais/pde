@@ -1,0 +1,191 @@
+# =============================================================================
+# PDE — AWS EKS Cluster (CloudFormation)
+#
+# Creates an EKS cluster with managed node group in ap-south-1.
+# Uses existing VPC from infrastructure.yaml or a new dedicated VPC.
+#
+# PREREQUISITES:
+#   - VPC with at least 2 subnets across 2 AZs
+#   - ECR repositories (aws/ecr.yaml) deployed
+#
+# DEPLOY:
+#   aws cloudformation deploy \
+#     --stack-name pde-eks \
+#     --template-file aws/eks-cluster.yaml \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --parameter-overrides \
+#       SubnetIds="subnet-xxx,subnet-yyy" \
+#       VpcId="vpc-xxx" \
+#     --region ap-south-1
+# =============================================================================
+AWSTemplateFormatVersion: "2010-09-09"
+Description: EKS cluster and managed node group for PDE
+
+Parameters:
+  ClusterName:
+    Type: String
+    Default: pde-cluster
+  KubernetesVersion:
+    Type: String
+    Default: "1.30"
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID for the EKS cluster
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Comma-separated list of subnet IDs (at least 2 AZs)
+  NodeInstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.micro, t3.small, t3.medium]
+  NodeDesiredCapacity:
+    Type: Number
+    Default: 2
+  NodeMinSize:
+    Type: Number
+    Default: 2
+  NodeMaxSize:
+    Type: Number
+    Default: 4
+  NodeDiskSize:
+    Type: Number
+    Default: 20
+
+Resources:
+  # ---------- EKS Cluster IAM Role ----------
+  EksClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ClusterName}-cluster-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSVPCResourceController
+
+  # ---------- EKS Node Group IAM Role ----------
+  EksNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ClusterName}-node-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  # ---------- Cluster Security Group ----------
+  ClusterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EKS cluster security group
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ClusterName}-cluster-sg"
+
+  # ---------- EKS Cluster ----------
+  EksCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref ClusterName
+      Version: !Ref KubernetesVersion
+      RoleArn: !GetAtt EksClusterRole.Arn
+      ResourcesVpcConfig:
+        SubnetIds: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref ClusterSecurityGroup
+        EndpointPublicAccess: true
+        EndpointPrivateAccess: true
+      Logging:
+        ClusterLogging:
+          EnabledTypes:
+            - Type: api
+            - Type: audit
+            - Type: authenticator
+
+  # ---------- Managed Node Group ----------
+  EksNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    DependsOn: EksCluster
+    Properties:
+      ClusterName: !Ref ClusterName
+      NodegroupName: !Sub "${ClusterName}-nodes"
+      NodeRole: !GetAtt EksNodeRole.Arn
+      Subnets: !Ref SubnetIds
+      InstanceTypes:
+        - !Ref NodeInstanceType
+      DiskSize: !Ref NodeDiskSize
+      ScalingConfig:
+        MinSize: !Ref NodeMinSize
+        MaxSize: !Ref NodeMaxSize
+        DesiredSize: !Ref NodeDesiredCapacity
+      UpdateConfig:
+        MaxUnavailable: 1
+      Labels:
+        environment: production
+        project: pde
+      Tags:
+        Project: PDE
+        ManagedBy: CloudFormation
+
+  # ---------- EKS Add-ons ----------
+  VpcCniAddon:
+    Type: AWS::EKS::Addon
+    DependsOn: EksNodeGroup
+    Properties:
+      ClusterName: !Ref ClusterName
+      AddonName: vpc-cni
+      ResolveConflicts: OVERWRITE
+
+  CoreDnsAddon:
+    Type: AWS::EKS::Addon
+    DependsOn: EksNodeGroup
+    Properties:
+      ClusterName: !Ref ClusterName
+      AddonName: coredns
+      ResolveConflicts: OVERWRITE
+
+  KubeProxyAddon:
+    Type: AWS::EKS::Addon
+    DependsOn: EksNodeGroup
+    Properties:
+      ClusterName: !Ref ClusterName
+      AddonName: kube-proxy
+      ResolveConflicts: OVERWRITE
+
+Outputs:
+  ClusterName:
+    Description: EKS cluster name
+    Value: !Ref EksCluster
+  ClusterArn:
+    Description: EKS cluster ARN
+    Value: !GetAtt EksCluster.Arn
+  ClusterEndpoint:
+    Description: EKS cluster API endpoint
+    Value: !GetAtt EksCluster.Endpoint
+  ClusterSecurityGroupId:
+    Description: Cluster security group ID
+    Value: !Ref ClusterSecurityGroup
+  NodeRoleArn:
+    Description: Node group IAM role ARN
+    Value: !GetAtt EksNodeRole.Arn
+  OIDCIssuer:
+    Description: OIDC issuer URL for IRSA
+    Value: !GetAtt EksCluster.OpenIdConnectIssuerUrl
+  KubeconfigCommand:
+    Description: Command to update kubeconfig
+    Value: !Sub "aws eks update-kubeconfig --name ${ClusterName} --region ${AWS::Region}"

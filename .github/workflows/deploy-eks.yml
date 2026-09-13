@@ -1,0 +1,95 @@
+name: Deploy to EKS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  AWS_REGION: ap-south-1
+  EKS_CLUSTER: pde-cluster
+  ECR_REGISTRY: 967501764038.dkr.ecr.ap-south-1.amazonaws.com
+
+jobs:
+  # ---------- Step 1: Build & Push Images ----------
+  build:
+    name: Build & Push Images
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      environment: ${{ github.event.inputs.environment || 'production' }}
+    permissions:
+      id-token: write
+      contents: read
+
+  # ---------- Step 2: Deploy to EKS ----------
+  deploy:
+    name: Deploy to EKS
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::967501764038:role/github-actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.2
+
+      - name: Set image tag
+        id: tag
+        run: echo "sha_tag=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Deploy with Helm
+        run: |
+          ENV=${{ github.event.inputs.environment || 'production' }}
+          helm upgrade --install pde helm/pde/ \
+            -f helm/pde/values-${ENV}.yaml \
+            --set backend.image.tag=${{ steps.tag.outputs.sha_tag }} \
+            --set frontend.image.tag=${{ steps.tag.outputs.sha_tag }} \
+            --namespace pde \
+            --create-namespace \
+            --wait \
+            --timeout 300s
+
+      - name: Verify deployment
+        run: |
+          echo "--- Checking rollout status ---"
+          kubectl rollout status deployment/pde-backend -n pde --timeout=180s
+          kubectl rollout status deployment/pde-frontend -n pde --timeout=120s
+          echo "--- Pod status ---"
+          kubectl get pods -n pde
+          echo "--- Services ---"
+          kubectl get svc -n pde
+          echo "--- Ingress ---"
+          kubectl get ingress -n pde
+
+      - name: Run Helm tests
+        run: helm test pde -n pde --timeout 60s
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment failed — rolling back to previous release"
+          helm rollback pde -n pde
+          kubectl get pods -n pde

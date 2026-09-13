@@ -1,0 +1,14 @@
+apiVersion: v2
+name: pde
+description: DakhalNama Public Data Entry — Helm chart for AWS EKS deployment
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+maintainers:
+  - name: Owais Farooqui
+    email: owaisfarooqui.dev@gmail.com
+keywords:
+  - pde
+  - dakhalnama
+  - fastapi
+  - react

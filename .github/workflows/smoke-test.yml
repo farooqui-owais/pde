@@ -1,0 +1,79 @@
+name: Post-Deploy Smoke Test
+
+on:
+  workflow_run:
+    workflows: ["Deploy to EKS"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      endpoint:
+        description: 'ALB endpoint URL to test'
+        required: true
+        type: string
+
+jobs:
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::967501764038:role/github-actions
+          aws-region: ap-south-1
+
+      - name: Get ALB endpoint
+        id: endpoint
+        run: |
+          aws eks update-kubeconfig --name pde-cluster --region ap-south-1
+          ALB_URL=$(kubectl get ingress -n pde -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+          if [ -n "${{ github.event.inputs.endpoint }}" ]; then
+            ALB_URL="${{ github.event.inputs.endpoint }}"
+          fi
+          echo "url=http://${ALB_URL}" >> $GITHUB_OUTPUT
+          echo "Testing endpoint: http://${ALB_URL}"
+
+      - name: Test health endpoint
+        run: |
+          echo "Testing /api/health..."
+          RESPONSE=$(curl -sf --retry 5 --retry-delay 10 "${{ steps.endpoint.outputs.url }}/api/health")
+          echo "Response: $RESPONSE"
+          STATUS=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+          if [ "$STATUS" != "ok" ]; then
+            echo "❌ Health check failed! Status: $STATUS"
+            exit 1
+          fi
+          echo "✅ Health check passed"
+
+      - name: Test frontend loads
+        run: |
+          echo "Testing frontend /..."
+          HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' --retry 3 --retry-delay 5 "${{ steps.endpoint.outputs.url }}/")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Frontend returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+          echo "✅ Frontend loads (HTTP 200)"
+
+      - name: Test API response headers
+        run: |
+          echo "Testing security headers..."
+          HEADERS=$(curl -sI --retry 3 "${{ steps.endpoint.outputs.url }}/api/health")
+          echo "$HEADERS"
+          # Check for security headers
+          echo "$HEADERS" | grep -qi "x-content-type-options" && echo "✅ X-Content-Type-Options present" || echo "⚠️  X-Content-Type-Options missing"
+          echo "$HEADERS" | grep -qi "x-frame-options" && echo "✅ X-Frame-Options present" || echo "⚠️  X-Frame-Options missing"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "⚠️  Smoke tests failed — initiating rollback"
+          aws eks update-kubeconfig --name pde-cluster --region ap-south-1
+          helm rollback pde -n pde || echo "Rollback failed or no previous release"
+          echo "Rollback complete. Please investigate."

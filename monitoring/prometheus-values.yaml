@@ -1,0 +1,99 @@
+# =============================================================================
+# kube-prometheus-stack Helm chart values for PDE
+#
+# INSTALL:
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   helm install monitoring prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace \
+#     -f monitoring/prometheus-values.yaml
+# =============================================================================
+
+# ---------- Prometheus ----------
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    # Scrape PDE backend /metrics endpoint
+    additionalScrapeConfigs:
+      - job_name: 'pde-backend'
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [pde]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: backend-svc
+            action: keep
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            regex: http
+            action: keep
+        metrics_path: /metrics
+        scrape_interval: 15s
+
+# ---------- Grafana ----------
+grafana:
+  enabled: true
+  adminPassword: "pde-grafana-admin"  # Change in production!
+  persistence:
+    enabled: true
+    size: 5Gi
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'pde-dashboards'
+          orgId: 1
+          folder: 'PDE'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/pde
+  # Dashboards will be loaded from ConfigMaps
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: monitoring
+
+# ---------- Alertmanager ----------
+alertmanager:
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'namespace']
+      group_wait: 10s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'email-notifications'
+      routes:
+        - match:
+            severity: critical
+          receiver: 'email-notifications'
+          repeat_interval: 1h
+    receivers:
+      - name: 'email-notifications'
+        email_configs:
+          - to: 'owaisfarooqui.dev@gmail.com'
+            from: 'alertmanager@pde.local'
+            smarthost: 'smtp.gmail.com:587'
+            auth_username: 'owaisfarooqui.dev@gmail.com'
+            auth_password: ''  # Use Gmail App Password
+            require_tls: true
+
+# ---------- Node Exporter ----------
+nodeExporter:
+  enabled: true
+
+# ---------- kube-state-metrics ----------
+kubeStateMetrics:
+  enabled: true

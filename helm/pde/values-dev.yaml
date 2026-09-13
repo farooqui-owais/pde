@@ -1,0 +1,45 @@
+# Local development overrides (Docker Desktop / Minikube)
+global:
+  namespace: pde
+
+backend:
+  replicaCount: 1
+  image:
+    repository: pde/backend
+    tag: latest
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+  env:
+    DEBUG: "True"
+    DATABASE_URL: "postgresql://postgres:postgres@postgres-svc.pde.svc.cluster.local:5432/pde"
+    CORS_ORIGINS: "http://localhost:5173,http://localhost:80,http://localhost"
+    CSRF_COOKIE_SECURE: "False"
+    TRUSTED_HOSTS: "*"
+    SECRET_KEY: "dev-only-secret-key-not-for-production"
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: pde/frontend
+    tag: latest
+    pullPolicy: Never
+  autoscaling:
+    enabled: false
+
+ingress:
+  enabled: false
+
+# Local PostgreSQL (for dev only — production uses RDS)
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  storage: 1Gi
+  password: postgres

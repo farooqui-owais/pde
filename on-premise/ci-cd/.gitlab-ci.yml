@@ -1,0 +1,44 @@
+stages:
+  - test
+  - deploy
+  - verify
+
+variables:
+  DOCKER_DRIVER: overlay2
+
+backend_test:
+  stage: test
+  image: python:3.11-slim
+  script:
+    - cd pde-backend
+    - pip install -r requirements-dev.txt
+    - ruff check app/
+    - pytest tests/ --cov=app -v
+
+frontend_test:
+  stage: test
+  image: node:20-alpine
+  script:
+    - cd pde-frontend
+    - npm ci
+    - npm run build
+
+deploy_onpremise:
+  stage: deploy
+  tags:
+    - onpremise-shell
+  only:
+    - main
+  script:
+    - cd on-premise
+    - bash scripts/deploy.sh
+
+verify_onpremise:
+  stage: verify
+  tags:
+    - onpremise-shell
+  only:
+    - main
+  script:
+    - cd on-premise
+    - bash scripts/healthcheck.sh

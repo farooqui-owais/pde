@@ -1,0 +1,28 @@
+# Staging environment overrides
+global:
+  namespace: pde-staging
+
+backend:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  env:
+    DEBUG: "True"
+    CSRF_COOKIE_SECURE: "True"
+    RATE_LIMIT_MAX: "20"
+  externalSecrets:
+    enabled: true
+    remoteRef: pde/staging
+
+frontend:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+
+ingress:
+  enabled: true
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health

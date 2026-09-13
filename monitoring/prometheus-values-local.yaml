@@ -1,0 +1,126 @@
+# =============================================================================
+# kube-prometheus-stack values for the LOCAL kind cluster.
+#
+# monitoring/prometheus-values.yaml (unchanged) targets EKS: 10Gi/5Gi storage
+# and Alertmanager email via Gmail SMTP. Neither is realistic for a laptop
+# practice cluster, so this file trims both:
+#   - much smaller storage requests (kind's default StorageClass is
+#     "standard", backed by local hostPath — fine for practice, not durable)
+#   - Alertmanager kept enabled (so PrometheusRule alerts still fire and are
+#     visible in the Alertmanager UI) but with the email receiver removed,
+#     since most local setups won't have real SMTP credentials handy.
+#
+# Install:
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   helm install monitoring prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace \
+#     -f monitoring/prometheus-values-local.yaml
+#
+# I'm fairly confident kube-prometheus-stack's structure below matches recent
+# chart versions, but Helm value schemas do change across chart releases —
+# if `helm install` rejects a key, check `helm show values
+# prometheus-community/kube-prometheus-stack` for the version you pulled.
+# =============================================================================
+
+prometheus:
+  prometheusSpec:
+    retention: 3d
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    # Same scrape job as the EKS values file — points at the pde-backend
+    # /metrics endpoint added in pde-backend/app/main.py.
+    additionalScrapeConfigs:
+      - job_name: 'pde-backend'
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [pde]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: backend-svc
+            action: keep
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            regex: http
+            action: keep
+        metrics_path: /metrics
+        scrape_interval: 15s
+
+grafana:
+  enabled: true
+  adminPassword: "pde-grafana-admin" # local only — change if this cluster is ever exposed
+  persistence:
+    enabled: true
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'pde-dashboards'
+          orgId: 1
+          folder: 'PDE'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/pde
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: monitoring
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'namespace']
+      group_wait: 10s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'null' # no SMTP locally — view alerts in the Alertmanager UI instead
+    receivers:
+      - name: 'null'
+
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true

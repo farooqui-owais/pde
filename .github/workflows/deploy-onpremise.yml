@@ -1,0 +1,95 @@
+name: Deploy to On-Premise
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'on-premise/**'
+      - 'pde-backend/**'
+      - 'pde-frontend/**'
+  workflow_dispatch:
+
+concurrency:
+  group: onpremise-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Quality Gates (Lint & Test)
+  # ---------------------------------------------------------------------------
+  quality-check:
+    name: Code Verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: pde-backend/requirements-dev.txt
+
+      - name: Backend Tests
+        run: |
+          cd pde-backend
+          pip install -r requirements-dev.txt
+          ruff check app/
+          pytest tests/ --cov=app -v
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          SECRET_KEY: "ci-secret-key-for-testing-purpose-only"
+          DEBUG: "True"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: pde-frontend/package-lock.json
+
+      - name: Frontend Build Verification
+        run: |
+          cd pde-frontend
+          npm ci
+          npm run build
+        env:
+          VITE_API_BASE_URL: "/"
+
+  # ---------------------------------------------------------------------------
+  # 2. Deploy to On-Premise Host via SSH
+  # ---------------------------------------------------------------------------
+  deploy-onpremise:
+    name: Deploy to On-Premise Server
+    needs: quality-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Execute Remote Deployment via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ONPREMISE_HOST }}
+          username: ${{ secrets.ONPREMISE_USER }}
+          key: ${{ secrets.ONPREMISE_SSH_KEY }}
+          port: ${{ secrets.ONPREMISE_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -e
+            DEPLOY_PATH="${{ secrets.ONPREMISE_PATH || '/opt/pde' }}"
+            echo "Navigating to deployment directory: ${DEPLOY_PATH}"
+            cd "${DEPLOY_PATH}"
+            
+            echo "Fetching latest changes from repository..."
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "Executing On-Premise Deploy Script..."
+            bash on-premise/scripts/deploy.sh
+
+      - name: Post-Deploy Smoke Test
+        if: ${{ secrets.ONPREMISE_URL != '' }}
+        run: |
+          echo "Verifying application status at ${{ secrets.ONPREMISE_URL }}..."
+          curl --fail --retry 5 --retry-delay 10 --silent --show-error \
+            "${{ secrets.ONPREMISE_URL }}/api/health"
