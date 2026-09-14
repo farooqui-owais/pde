@@ -11,9 +11,15 @@ sqlalchemy==2.0.30
 psycopg2-binary==2.9.10
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
+# 4.2.x has prebuilt wheels for Python 3.13 (Jenkins); 4.0.1 would need a
+# Rust toolchain. passlib 1.7.4 still works with bcrypt 4.2 (it only logs a
+# harmless warning about the removed __about__ attribute).
+bcrypt==4.2.1
 python-multipart==0.0.9
-pydantic[email]==2.7.1
+# 2.9.2+ ships prebuilt pydantic-core wheels for Python 3.13 (used by the
+# Jenkins container); 2.7.1's pydantic-core would need a Rust toolchain to
+# build from source. FastAPI 0.111 allows pydantic <3, so this is compatible.
+pydantic[email]==2.9.2
 python-dotenv==1.0.1
 alembic==1.13.1
 # Exposes a /metrics endpoint (Prometheus text format) for kube-prometheus-stack
