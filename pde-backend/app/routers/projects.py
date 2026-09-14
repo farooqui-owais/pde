@@ -45,7 +45,7 @@ def list_projects(
 ):
     q = db.query(models_scheme.Project).filter(
         models_scheme.Project.created_by == current_user.id,
-        models_scheme.Project.is_active == True,
+        models_scheme.Project.is_active.is_(True),
     )
     if search:
         q = q.filter(models_scheme.Project.project_name.ilike(f"%{search}%"))

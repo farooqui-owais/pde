@@ -15,7 +15,6 @@ from sqlalchemy import (
     ForeignKey,
     Numeric,
     Boolean,
-    Text,
     Enum,
     JSON,
 )

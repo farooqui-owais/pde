@@ -9,7 +9,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .config import get_settings
 from .database import Base, engine
 from .middleware import CSRFProtectMiddleware, SecurityHeadersMiddleware
-from . import models, models_pde, models_scheme, models_verification
+# These imports register the SQLAlchemy models on Base.metadata — required
+# for create_all/alembic even though the names are not referenced directly.
+from . import models, models_pde, models_scheme, models_verification  # noqa: F401
 from .routers import (
     auth, tokens, documents, reference, stamp, pde, entry_details,
     projects, schemes, seller_parties, scheme_identifier, scheme_documents, templates,

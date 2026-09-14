@@ -4,7 +4,7 @@ from typing import Optional, Any, Dict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .validators import validate_capture_type, validate_positive_decimal
+from .validators import validate_capture_type
 
 
 # ---------------- Execution Capture ----------------

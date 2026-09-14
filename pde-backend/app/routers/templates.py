@@ -1,5 +1,5 @@
 import re
-from typing import List, Dict, Any
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -172,7 +172,6 @@ def preview_or_test_template(
 
     # Find tokens like {{token_name}} or {{ token_name }}
     token_pattern = re.compile(r"\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}")
-    all_tokens = token_pattern.findall(content)
 
     tokens_replaced = []
     missing_tokens = []

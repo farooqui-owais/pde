@@ -1,7 +1,7 @@
 """Seed reference data: districts, offices, article types.
 Run with: python -m app.seed
 """
-from .database import SessionLocal, Base, engine
+from .database import SessionLocal
 from . import models
 
 DISTRICTS = [

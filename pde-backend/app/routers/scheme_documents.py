@@ -1,5 +1,4 @@
 import os
-import shutil
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import FileResponse
@@ -84,7 +83,7 @@ async def upload_scheme_document(
         .filter(
             models_scheme.SchemeDocument.scheme_id == scheme_id,
             models_scheme.SchemeDocument.document_type == document_type,
-            models_scheme.SchemeDocument.is_active == True,
+            models_scheme.SchemeDocument.is_active.is_(True),
         )
         .first()
     )

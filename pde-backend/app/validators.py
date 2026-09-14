@@ -114,15 +114,6 @@ def validate_aadhaar_optional(value: Optional[str]) -> Optional[str]:
     return normalized
 
 
-def validate_email_optional(value: Optional[str]) -> Optional[str]:
-    if value is None or not str(value).strip():
-        return None
-    normalized = str(value).strip()
-    if not EMAIL_PATTERN.match(normalized):
-        raise ValueError("Invalid email address")
-    return normalized
-
-
 def has_bilingual_name(
     first_en: Optional[str],
     first_mr: Optional[str],
