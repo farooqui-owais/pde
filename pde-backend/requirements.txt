@@ -5,7 +5,10 @@ uvicorn[standard]==0.30.1
 # A fresh venv without this would fail with 203/EXEC on the EC2.
 gunicorn==22.0.0
 sqlalchemy==2.0.30
-psycopg2-binary==2.9.9
+# 2.9.10+ is required for Python 3.13 wheels (2.9.9 would try a source build
+# and fail with "pg_config executable not found"); 2.9.10 still ships wheels
+# for 3.11 used by pde-backend/Dockerfile.
+psycopg2-binary==2.9.10
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
