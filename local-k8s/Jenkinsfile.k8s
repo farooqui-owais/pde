@@ -43,15 +43,19 @@ pipeline {
 
         stage('Backend Quality Gate') {
             steps {
-                dir('pde-backend') {
-                    sh '''
-                        python3 -m venv .venv
-                        . .venv/bin/activate
-                        pip install -r requirements-dev.txt
-                        ruff check app/
-                        pytest tests/ --cov=app -v
-                    '''
-                }
+                // Run backend tests in the same Python 3.11 image used in production
+                // This avoids version mismatches and ensures consistent test environment
+                sh '''
+                    docker run --rm -v "$(pwd)/pde-backend:/app" \
+                        python:3.11-slim sh -c '
+                            cd /app
+                            python3 -m venv .venv
+                            . .venv/bin/activate
+                            pip install -r requirements-dev.txt
+                            ruff check app/
+                            pytest tests/ --cov=app -v
+                        '
+                '''
             }
         }
 
