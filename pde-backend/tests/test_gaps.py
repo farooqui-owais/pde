@@ -1,5 +1,5 @@
 import pytest
-from datetime import date
+from datetime import date, timedelta
 
 from app import models
 
@@ -14,6 +14,8 @@ def _minimal_entry_payload(token_id: str) -> dict:
 
 
 def test_gap1_slot_booking_flow(client, db_session, auth_headers):
+    booking_date = (date.today() + timedelta(days=5)).strftime("%Y-%m-%d")
+
     # Seed a real office so the booking validation (office must exist) passes.
     district = models.District(name="Pune")
     db_session.add(district)
@@ -24,7 +26,7 @@ def test_gap1_slot_booking_flow(client, db_session, auth_headers):
     office_id = office.id
 
     # 1. Get available slots
-    res = client.get(f"/api/slots/available?office_id={office_id}&office_type=Regular&date=2026-09-10", headers=auth_headers)
+    res = client.get(f"/api/slots/available?office_id={office_id}&office_type=Regular&date={booking_date}", headers=auth_headers)
     assert res.status_code == 200
     slots = res.json()
     assert len(slots) > 0
@@ -34,7 +36,7 @@ def test_gap1_slot_booking_flow(client, db_session, auth_headers):
     book_payload = {
         "office_id": office_id,
         "office_type": "Regular",
-        "date": "2026-09-10",
+        "date": booking_date,
         "slot_number": slot_to_book["slot_number"],
         "slot_start_time": slot_to_book["slot_start_time"],
         "slot_end_time": slot_to_book["slot_end_time"],
