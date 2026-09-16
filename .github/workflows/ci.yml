@@ -1,10 +1,23 @@
 name: CI
 
+# Single source of truth for quality gates on PRs and pushes to main.
+# LOCAL-FIRST POLICY: this is the ONLY workflow that auto-runs on every push.
+# All deploy workflows (EKS / EC2 / on-prem / Render-Netlify) are manual-only
+# until their target is configured — see GITHUB-ACTIONS.md.
+
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'local-k8s/**'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true   # a new push cancels the superseded run — fewer red builds, less minutes
+
 
 jobs:
   backend:

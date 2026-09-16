@@ -1,12 +1,18 @@
 name: Deploy to On-Premise
 
+# LOCAL-FIRST POLICY (see GITHUB-ACTIONS.md)
+# ------------------------------------------
+# Manual trigger only. The push trigger is disabled because the on-premise
+# SSH secrets are not configured in this repo yet — every push used to fail.
+# Re-add the push trigger once ONPREMISE_* secrets are configured.
+
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'on-premise/**'
-      - 'pde-backend/**'
-      - 'pde-frontend/**'
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'on-premise/**'
+  #     - 'pde-backend/**'
+  #     - 'pde-frontend/**'
   workflow_dispatch:
 
 concurrency:
@@ -66,6 +72,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Fail fast with an actionable message instead of a cryptic SSH error
+      # when secrets are missing. (The `secrets` context cannot be used in
+      # `if:` conditions, so map secrets to env vars and test those.)
+      - name: Verify deploy secrets are configured
+        env:
+          HOST: ${{ secrets.ONPREMISE_HOST }}
+          USER: ${{ secrets.ONPREMISE_USER }}
+          KEY: ${{ secrets.ONPREMISE_SSH_KEY }}
+        run: |
+          MISSING=""
+          [ -z "$HOST" ] && MISSING="ONPREMISE_HOST "
+          [ -z "$USER" ] && MISSING="${MISSING}ONPREMISE_USER "
+          [ -z "$KEY" ]  && MISSING="${MISSING}ONPREMISE_SSH_KEY"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing repo secrets: $MISSING"
+            echo "Add them under Settings > Secrets and variables > Actions, then re-run this workflow."
+            exit 1
+          fi
+
       - name: Execute Remote Deployment via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -88,8 +113,13 @@ jobs:
             bash on-premise/scripts/deploy.sh
 
       - name: Post-Deploy Smoke Test
-        if: ${{ secrets.ONPREMISE_URL != '' }}
+        # NOTE: the `secrets` context is NOT valid in `if:` — map it to an
+        # env var and test the env var instead (the old
+        # `if: ${{ secrets.ONPREMISE_URL != '' }}` broke workflow parsing).
+        env:
+          ONPREMISE_URL: ${{ secrets.ONPREMISE_URL }}
+        if: env.ONPREMISE_URL != ''
         run: |
-          echo "Verifying application status at ${{ secrets.ONPREMISE_URL }}..."
+          echo "Verifying application status at $ONPREMISE_URL..."
           curl --fail --retry 5 --retry-delay 10 --silent --show-error \
-            "${{ secrets.ONPREMISE_URL }}/api/health"
+            "$ONPREMISE_URL/api/health"

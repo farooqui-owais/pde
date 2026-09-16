@@ -1,13 +1,19 @@
 name: Deploy to Netlify & Render
 
+# LOCAL-FIRST POLICY (see GITHUB-ACTIONS.md)
+# ------------------------------------------
+# Manual trigger only. The push trigger is disabled because the Netlify /
+# Render secrets are not configured in this repo yet — every push used to
+# fail. Re-add the push trigger once NETLIFY_* / RENDER_* secrets exist.
+
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'pde-frontend/**'
-      - 'pde-backend/**'
-      - 'render.yaml'
-      - 'netlify.toml'
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'pde-frontend/**'
+  #     - 'pde-backend/**'
+  #     - 'render.yaml'
+  #     - 'netlify.toml'
   workflow_dispatch:
 
 concurrency:
@@ -115,9 +121,14 @@ jobs:
           echo "Triggering deploy hook on Render..."
           curl -f -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
 
-      - name: Verify Backend Health on Render
-        if: ${{ secrets.RENDER_BACKEND_URL != '' }}
+      - name: Post-Deploy Verification
+        # NOTE: the `secrets` context is NOT valid in `if:` — map it to an
+        # env var and test the env var instead (the old
+        # `if: ${{ secrets.RENDER_BACKEND_URL != '' }}` broke workflow parsing).
+        env:
+          RENDER_BACKEND_URL: ${{ secrets.RENDER_BACKEND_URL }}
+        if: env.RENDER_BACKEND_URL != ''
         run: |
           echo "Waiting for Render deployment to become healthy..."
           curl --fail --retry 10 --retry-delay 15 --silent --show-error \
-            "${{ secrets.RENDER_BACKEND_URL }}/api/health"
+            "$RENDER_BACKEND_URL/api/health"

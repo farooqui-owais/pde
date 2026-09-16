@@ -1,11 +1,17 @@
 name: Deploy
 
-# Deploys to the production EC2 on merge to `main` (or manual trigger).
+# Deploys to the production EC2 on demand (manual trigger only).
 # See CICD.md for the full design and the OIDC role setup required.
+#
+# LOCAL-FIRST POLICY (see GITHUB-ACTIONS.md)
+# ------------------------------------------
+# PAUSED: no longer runs on push — the AWS OIDC role / EC2 instance are not
+# configured yet, so push-triggered runs failed on every commit to main.
+# Re-enable the `push:` trigger once the AWS side is live.
 
 on:
-  push:
-    branches: [main]
+  # push:
+  #   branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -1,8 +1,19 @@
 name: Deploy to EKS
 
+# LOCAL-FIRST POLICY (see GITHUB-ACTIONS.md)
+# ------------------------------------------
+# PAUSED: this workflow no longer runs on push. The AWS side (OIDC role,
+# ECR, EKS cluster) is not set up yet, so every push to main used to produce
+# a guaranteed failed run. Local deploys happen via the Jenkins → ArgoCD →
+# kind stack instead.
+#
+# To re-enable later:
+#   1. Uncomment the `push:` trigger below.
+#   2. Create the `github-actions` OIDC role in AWS (see CICD.md §6).
+
 on:
-  push:
-    branches: [main]
+  # push:
+  #   branches: [main]
   workflow_dispatch:
     inputs:
       environment:

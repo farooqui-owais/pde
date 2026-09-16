@@ -1,9 +1,16 @@
 name: Post-Deploy Smoke Test
 
+# LOCAL-FIRST POLICY (see GITHUB-ACTIONS.md)
+# ------------------------------------------
+# PAUSED: this workflow smoke-tests the EKS deployment (via `workflow_run`
+# on "Deploy to EKS") and needs the AWS OIDC role — both are not set up yet.
+# Manual dispatch is still available for when AWS is configured, or run the
+# equivalent checks locally against kind (see local-k8s/README.md).
+
 on:
-  workflow_run:
-    workflows: ["Deploy to EKS"]
-    types: [completed]
+  # workflow_run:
+  #   workflows: ["Deploy to EKS"]
+  #   types: [completed]
   workflow_dispatch:
     inputs:
       endpoint:
