@@ -1,5 +1,23 @@
+# Jenkins plugins for the PDE local CI/CD stack.
+# jenkins-plugin-cli resolves transitive dependencies automatically.
+# Pinning by name only (no version) picks the latest set compatible
+# with the installed LTS version — update by rebuilding the image.
+#
+# Core pipeline:
 git
 workflow-aggregator
+pipeline-stage-view
+
+# Credentials & secrets:
 credentials-binding
+plain-credentials
+
+# Docker integration:
 docker-workflow
+docker-commons
+
+# Workspace cleanup (post-always cleanWs):
 ws-cleanup
+
+# SCM:
+github

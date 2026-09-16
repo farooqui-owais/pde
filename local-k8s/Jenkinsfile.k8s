@@ -1,64 +1,114 @@
 // =============================================================================
-// PDE — local Kubernetes + GitOps pipeline (kind + local registry + ArgoCD)
+// PDE — local Kubernetes + GitOps pipeline  (kind + local registry + ArgoCD)
 //
-// This is a SEPARATE pipeline from on-premise/ci-cd/Jenkinsfile, which
-// deploys via systemd/docker-compose and is left untouched. This one targets
-// the helm/pde chart + ArgoCD flow described in local-k8s/README.md.
+// OVERVIEW
+// --------
+// This pipeline is SEPARATE from on-premise/ci-cd/Jenkinsfile, which deploys
+// via systemd/docker-compose. This one drives the local k8s GitOps flow:
 //
-// Jenkins does NOT talk to the kind cluster directly to deploy — it only:
-//   1. runs quality gates
-//   2. builds + pushes images to the local registry
-//   3. bumps the two image.tag lines in helm/pde/values-local.yaml
-//   4. commits + pushes that change back to the git repo
-// ArgoCD (already watching that repo) detects the commit and syncs the
-// cluster itself. That handoff is the actual "GitOps" part — Jenkins never
-// runs `helm upgrade` or `kubectl apply` for the app itself.
+//   1. Quality Gates  — backend (Python 3.11 venv + ruff + pytest)
+//                       frontend (npm ci + lint + build)
+//   2. Build & Push   — docker build both images, push to local registry
+//   3. Bump tags      — sed-edit helm/pde/values-local.yaml with new image tags
+//   4. Git push       — commit + push the values change back to the repo
 //
-// SETUP NOTES (see local-k8s/README.md for the full walkthrough):
-// - Run this Jenkins container with the Docker socket mounted
-//   (-v /var/run/docker.sock:/var/run/docker.sock) so `docker build`/`push`
-//   below work, and with network access to localhost:5000 (the local
-//   registry) and to your git remote.
-// - Add a Jenkins credential (git-creds, "Username with password" or SSH)
-//   with push access to the repo this pipeline checks out from.
-// - GIT_REPO_URL below should be YOUR remote (GitHub/GitLab/local Gitea —
-//   see local-k8s/README.md §6 for a fully-offline Gitea option).
+// Jenkins never calls helm upgrade or kubectl apply for the application itself.
+// ArgoCD (watching the deploy/local branch) detects the bump commit and syncs
+// the cluster — that handoff is the actual "GitOps" boundary.
+//
+// PREREQUISITES (see local-k8s/README.md for the full walkthrough)
+// ----------------------------------------------------------------
+//  • Jenkins container started with:
+//      --network kind
+//      -v //var/run/docker.sock://var/run/docker.sock   (Windows/Docker Desktop)
+//      -v /var/run/docker.sock:/var/run/docker.sock     (Linux / macOS)
+//      --group-add 0   (Docker Desktop: socket owned root:root)
+//  • Jenkins credential ID "git-creds" (Username with password):
+//      Username : your GitHub username
+//      Password : GitHub Personal Access Token with repo push scope
+//  • Pipeline job configured to check out this repo,
+//    Script Path: local-k8s/Jenkinsfile.k8s
 // =============================================================================
+
 pipeline {
     agent any
 
     environment {
-        REGISTRY = "localhost:5000"
-        IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'local'}"
-        GIT_REPO_URL = "https://github.com/farooqui-owais/pde.git" // e.g. git@github.com:you/PDE.git
-        GIT_CREDENTIALS_ID = "git-creds"
+        REGISTRY    = "localhost:5000"
+        // Tag format: <build-number>-<git-short-sha>  e.g. "42-a1b2c3d"
+        // Falls back to "local" if GIT_COMMIT is unavailable (manual trigger
+        // without a full SCM checkout).
+        IMAGE_TAG   = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'local'}"
+        // IMPORTANT: keep this as the HTTPS URL (no embedded credentials).
+        // The "Bump & Push" stage constructs an authenticated URL at runtime
+        // using the git-creds credential so the token never appears in the
+        // Jenkinsfile or in build logs.
+        GIT_REPO_URL        = "https://github.com/farooqui-owais/pde.git"
+        GIT_CREDENTIALS_ID  = "git-creds"
     }
 
     stages {
+
+        // ---------------------------------------------------------------
+        // Stage 1 — Checkout
+        // ---------------------------------------------------------------
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
+        // ---------------------------------------------------------------
+        // Stage 2 — Backend Quality Gate
+        //
+        // Runs inside the official python:3.11-slim image (same base as
+        // pde-backend/Dockerfile) to guarantee version parity with prod.
+        //
+        // Windows/Docker Desktop note: $(pwd) inside the Jenkins container
+        // returns a Linux path (/var/jenkins_home/workspace/...). Docker
+        // Desktop correctly translates this to a host bind-mount because
+        // the Jenkins container itself runs inside Docker Desktop's Linux VM.
+        // The bind-mount path therefore never needs to be a Windows path.
+        //
+        // Steps inside the container:
+        //   • python3 -m venv  → isolated, clean environment
+        //   • pip install       → all prod + dev dependencies
+        //   • ruff check        → linting (PEP 8 / style enforcement)
+        //   • pytest            → unit tests with coverage report
+        // ---------------------------------------------------------------
         stage('Backend Quality Gate') {
             steps {
-                // Run backend tests in the same Python 3.11 image used in production
-                // This avoids version mismatches and ensures consistent test environment
                 sh '''
-                    docker run --rm -v "$(pwd)/pde-backend:/app" \
-                        python:3.11-slim sh -c '
-                            cd /app
+                    docker run --rm \
+                        -v "$(pwd)/pde-backend:/app" \
+                        -w /app \
+                        -e DATABASE_URL="sqlite:///:memory:" \
+                        -e DEBUG="True" \
+                        -e SECRET_KEY="ci-test-secret-key-32-chars-long!" \
+                        python:3.11-slim \
+                        sh -c "
                             python3 -m venv .venv
                             . .venv/bin/activate
-                            pip install -r requirements-dev.txt
+                            pip install --quiet --upgrade pip
+                            pip install --quiet -r requirements-dev.txt
+                            echo '--- ruff lint ---'
                             ruff check app/
-                            pytest tests/ --cov=app -v
-                        '
+                            echo '--- pytest ---'
+                            pytest tests/ --cov=app --cov-report=term-missing -v
+                        "
                 '''
             }
         }
 
+        // ---------------------------------------------------------------
+        // Stage 3 — Frontend Quality Gate
+        //
+        // npm ci  : clean, reproducible install from package-lock.json
+        // lint    : || true is intentional for local practice — remove
+        //           the '|| true' in a production pipeline to break on
+        //           lint failures.
+        // build   : Vite production bundle (validates the build succeeds)
+        // ---------------------------------------------------------------
         stage('Frontend Quality Gate') {
             steps {
                 dir('pde-frontend') {
@@ -71,39 +121,92 @@ pipeline {
             }
         }
 
+        // ---------------------------------------------------------------
+        // Stage 4 — Build & Push Images
+        //
+        // Builds both images and pushes to the local kind registry
+        // (localhost:5000). The registry is reachable from the Jenkins
+        // container because both are on the "kind" Docker network.
+        // ---------------------------------------------------------------
         stage('Build & Push Images') {
             steps {
                 sh """
-                    docker build -t ${REGISTRY}/pde/backend:${IMAGE_TAG} pde-backend
+                    docker build \
+                        -t ${REGISTRY}/pde/backend:${IMAGE_TAG} \
+                        pde-backend
+
                     docker push ${REGISTRY}/pde/backend:${IMAGE_TAG}
 
-                    docker build -f pde-frontend/Dockerfile.prod \
-                        -t ${REGISTRY}/pde/frontend:${IMAGE_TAG} pde-frontend
+                    docker build \
+                        -f pde-frontend/Dockerfile.prod \
+                        -t ${REGISTRY}/pde/frontend:${IMAGE_TAG} \
+                        pde-frontend
+
                     docker push ${REGISTRY}/pde/frontend:${IMAGE_TAG}
                 """
             }
         }
 
-        stage('Bump image tags for ArgoCD') {
+        // ---------------------------------------------------------------
+        // Stage 5 — Bump Image Tags for ArgoCD
+        //
+        // Edits the two `tag:` values inside helm/pde/values-local.yaml
+        // and pushes the change back to the repo. ArgoCD polls the repo
+        // every ~3 minutes and syncs automatically on detecting the change.
+        //
+        // sed note: we anchor each replacement to the line immediately
+        // following its parent key (`repository:`) using two-pass sed so
+        // we never accidentally replace a `tag:` key in another section
+        // (e.g. targetRevision, chart tags, etc.).
+        //
+        // git push note: credentials are injected into the remote URL at
+        // runtime via withCredentials — the token never appears in logs
+        // because Jenkins masks ${GIT_TOKEN} automatically.
+        // [skip ci] in the commit message prevents ArgoCD / any webhook
+        // from triggering a new build loop on this bump commit.
+        // ---------------------------------------------------------------
+        stage('Bump Image Tags for ArgoCD') {
             steps {
                 dir('helm/pde') {
-                    // sed, not yq, so this stage has zero extra binary
-                    // dependencies on the Jenkins agent beyond coreutils.
                     sh """
-                        sed -i "s/^\\(\\s*tag:\\).*/\\1 ${IMAGE_TAG}/" values-local.yaml
+                        # Replace tag under backend.image block (line after `repository: .*/backend`)
+                        sed -i '/repository:.*\\/pde\\/backend/{n; s|^\\(\\s*tag:\\).*|\\1 ${IMAGE_TAG}|}' values-local.yaml
+
+                        # Replace tag under frontend.image block (line after `repository: .*/frontend`)
+                        sed -i '/repository:.*\\/pde\\/frontend/{n; s|^\\(\\s*tag:\\).*|\\1 ${IMAGE_TAG}|}' values-local.yaml
+
+                        echo "Updated values-local.yaml:"
+                        grep -A2 'repository:' values-local.yaml
                     """
                 }
+
                 sh """
                     git config user.email 'jenkins@pde.local'
-                    git config user.name 'jenkins-ci'
+                    git config user.name  'jenkins-ci'
                     git add helm/pde/values-local.yaml
-                    git commit -m "ci: bump PDE image tags to ${IMAGE_TAG} [skip ci]" || echo "Nothing to commit"
+                    git commit -m "ci: bump PDE image tags to ${IMAGE_TAG} [skip ci]" \
+                        || echo "Nothing to commit — tag unchanged"
                 """
-                withCredentials([usernamePassword(credentialsId: "${GIT_CREDENTIALS_ID}",
-                                                    usernameVariable: 'GIT_USER',
-                                                    passwordVariable: 'GIT_TOKEN')]) {
+
+                // Inject credentials into the push URL at runtime.
+                // GIT_TOKEN is masked in logs by Jenkins credentials binding.
+                withCredentials([usernamePassword(
+                    credentialsId: "${GIT_CREDENTIALS_ID}",
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )]) {
                     sh """
-                        git push ${GIT_REPO_URL} HEAD:main
+                        AUTHENTICATED_URL=\$(echo "${GIT_REPO_URL}" | sed "s|https://|https://\${GIT_USER}:\${GIT_TOKEN}@|")
+
+                        // Push to the automation-only environment branch, NOT main.
+                        // deploy/local is a disposable "pointer" branch: it is
+                        // force-updated on every build to (main HEAD + bump commit).
+                        // ArgoCD's local app (targetRevision: deploy/local) watches
+                        // only this branch — bump commits never touch main, so
+                        // GitHub Actions CI is never re-triggered by them.
+                        // --force is required: main HEAD + bump is not a
+                        // fast-forward of the previous deploy/local tip.
+                        git push --force "\${AUTHENTICATED_URL}" HEAD:deploy/local
                     """
                 }
             }
@@ -112,10 +215,30 @@ pipeline {
 
     post {
         success {
-            echo "Pushed ${REGISTRY}/pde/{backend,frontend}:${IMAGE_TAG} and bumped values-local.yaml — ArgoCD will sync automatically."
-        }
-        always {
+            echo """
+╔══════════════════════════════════════════════════════════════════╗
+║  BUILD SUCCESS                                                    ║
+║  Pushed: ${REGISTRY}/pde/backend:${IMAGE_TAG}                    ║
+║  Pushed: ${REGISTRY}/pde/frontend:${IMAGE_TAG}                   ║
+║  Updated: helm/pde/values-local.yaml                             ║
+║  ArgoCD will sync within ~3 minutes automatically.               ║
+╚══════════════════════════════════════════════════════════════════╝
+            """
+            // Clean workspace only on success — on failure the workspace is
+            // preserved so you can inspect build artifacts and logs.
             cleanWs()
+        }
+        failure {
+            echo """
+╔══════════════════════════════════════════════════════════════════╗
+║  BUILD FAILED — workspace preserved for debugging.               ║
+║  Check the stage logs above for the exact error.                 ║
+║  Common causes:                                                  ║
+║    • Backend Quality Gate: ruff lint errors or failing tests     ║
+║    • Build & Push: registry not reachable (localhost:5000)       ║
+║    • Bump & Push: git-creds token expired or wrong scope         ║
+╚══════════════════════════════════════════════════════════════════╝
+            """
         }
     }
 }

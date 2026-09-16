@@ -5,10 +5,19 @@
 # reach (repoURL below):
 #   kubectl apply -f local-k8s/argocd/application.yaml
 #
-# From then on: any commit that changes helm/pde/** on the `main` branch
-# (e.g. Jenkins bumping image.tag in values-local.yaml) is auto-synced to the
-# `pde` namespace within ~3 minutes (ArgoCD's default poll interval), or
+# From then on: any commit on the `deploy/local` branch (e.g. Jenkins pushing
+# its image.tag bump commit to helm/pde/values-local.yaml) is auto-synced to
+# the `pde` namespace within ~3 minutes (ArgoCD's default poll interval), or
 # instantly if you configure a git webhook to ArgoCD's /api/webhook endpoint.
+#
+# BRANCH ISOLATION (see GITHUB-ACTIONS.md § Branch Strategy)
+# ----------------------------------------------------------
+# deploy/local is an AUTOMATION-ONLY branch (written exclusively by Jenkins,
+# force-updated each build). Humans commit to main via PRs. Each deployment
+# target gets its own deploy/* branch so environments can never interfere:
+#   deploy/local          -> this app (local kind)
+#   deploy/eks-staging    -> future staging ArgoCD app
+#   deploy/eks-production -> future production ArgoCD app
 # =============================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -26,7 +35,7 @@ spec:
     # repo credential in ArgoCD for that) or a fully local Gitea instance.
     # See local-k8s/README.md §6 for the no-cloud Gitea option.
     repoURL: https://github.com/farooqui-owais/pde.git
-    targetRevision: main
+    targetRevision: deploy/local
     path: helm/pde
     helm:
       valueFiles:
