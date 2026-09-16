@@ -1,31 +1,57 @@
 # PDE Local K8s CI/CD — Recovery & Checkpoint Guide
 
-If your system restarts or Docker crashes, use this guide to pick up where you left off **without starting from scratch**.
+If your system restarts or Docker crashes, use this guide to pick up where you left off **without starting from scratch**. Most components survive reboots — only Jenkins port-forwards need to be restarted manually.
+
+---
+
+## Quick Recovery (Single Command)
+
+```powershell
+cd C:\Users\Home\Desktop\project\PDE
+powershell -File local-k8s\scripts\restart-stack.ps1
+powershell -File local-k8s\scripts\start-port-forwards.ps1
+```
+
+This handles steps 1-4 below automatically. Only read further if something fails.
 
 ---
 
 ## Quick Status Check
 
-Run this to see what's still running:
-
 ```powershell
-# Check Docker containers
+# What's running?
 docker ps
 
-# Check kind clusters
+# Is the cluster alive?
 kind get clusters
-
-# Check kubectl access
 kubectl cluster-info
 kubectl get nodes
+kubectl get pods -n pde
+kubectl get pods -n argocd
+kubectl get pods -n monitoring
 ```
 
 ---
 
-## Recovery by Phase
+## What Survives a Reboot?
 
-### **Phase 0-1: Tools & Project Structure**
-✓ **Always survive restarts** — files don't move, just re-check versions:
+| Component | Survives? | Notes |
+|---|---|---|
+| Kind cluster `pde-dev` | ✓ Yes | Docker container auto-starts with Docker Desktop |
+| `kind-registry` | ✓ Yes | Created with `--restart=always` |
+| All k8s objects (PVCs, namespaces, deployments) | ✓ Yes | Stored in etcd inside the kind container |
+| Docker images (`backend:dev`, `frontend:dev`) | ✓ Yes | On host Docker layer storage |
+| Jenkins jobs + credentials | ✓ Yes | Stored in `jenkins_home` Docker volume |
+| ArgoCD config + app state | ✓ Yes | Stored in cluster etcd |
+| Port-forwards | ✗ No | Always restart manually after reboot |
+| Jenkins container | ✗ No | No `--restart` policy — start manually |
+
+---
+
+## Recovery by Component
+
+### Phase 1 — Tools (always survive)
+
 ```powershell
 docker --version
 kubectl version --client
@@ -36,117 +62,112 @@ git --version
 
 ---
 
-### **Phase 2: Kind Cluster**
+### Phase 2 — Kind Cluster
 
-**If cluster is still running:**
+**Check:**
 ```powershell
 kubectl get nodes
-# Expected: pde-dev-control-plane with status Ready
+# Expected: pde-dev-control-plane   Ready
 ```
 
-**If cluster crashed, recreate it:**
+**If cluster is gone (rare — only if Docker was wiped):**
 ```powershell
 cd C:\Users\Home\Desktop\project\PDE
-kind delete cluster --name pde-dev
-Start-Sleep -Seconds 5
+kind delete cluster --name pde-dev   # clean up any partial state
 kind create cluster --name pde-dev --config local-k8s/kind-config.yaml
 kubectl wait --for=condition=ready node pde-dev-control-plane --timeout=120s
 ```
 
+**If `kubectl` can't connect (kubeconfig stale after IP change):**
+```powershell
+kind export kubeconfig --name pde-dev
+kubectl cluster-info
+```
+
 ---
 
-### **Phase 3: Local Registry**
+### Phase 3 — Local Registry
 
-**Check if registry is running:**
+**Check:**
 ```powershell
 docker ps | Select-String "kind-registry"
-```
-
-**If it's gone, recreate it:**
-```powershell
-# 1. Create container
-docker run -d --restart=always -p "127.0.0.1:5000:5000" --network bridge --name kind-registry registry:2
-
-# 2. Connect to kind network
-docker network connect kind kind-registry
-
-# 3. Create ConfigMap in cluster
-$configmap = @"
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: local-registry-hosting
-  namespace: kube-public
-data:
-  localRegistryHosting.v1: |
-    host: "localhost:5000"
-    help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
-"@
-$configmap | kubectl apply -f -
-```
-
----
-
-### **Phase 4: Ingress-Nginx**
-
-**Check if it's running:**
-```powershell
-kubectl get pods -n ingress-nginx
-# Expected: ingress-nginx-controller-* pod in Running state
-```
-
-**If missing, reinstall:**
-```powershell
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
-```
-
-**Verify DNS:**
-```powershell
-ping pde.local
-# Expected: 127.0.0.1
-```
-
----
-
-### **Phase 5: App Images in Registry**
-
-**Check if images exist:**
-```powershell
-# List local registry images
 curl http://localhost:5000/v2/_catalog
-
-# Expected output:
-# {"repositories":["pde/backend","pde/frontend"]}
+# Expected: {"repositories":["pde/backend","pde/frontend"]}
 ```
 
-**If images are missing, rebuild & push:**
+**If registry is stopped:**
+```powershell
+docker start kind-registry
+```
+
+**If registry container is gone:**
+```powershell
+docker run -d --restart=always -p "127.0.0.1:5000:5000" --name kind-registry registry:2
+docker network connect kind kind-registry
+```
+
+**If images are missing from the registry (volume was wiped):**
 ```powershell
 cd C:\Users\Home\Desktop\project\PDE
-$REGISTRY = "localhost:5000"
 $TAG = "dev"
-
-# Backend
-docker build -t "${REGISTRY}/pde/backend:${TAG}" pde-backend
-docker push "${REGISTRY}/pde/backend:${TAG}"
-
-# Frontend
-docker build -f pde-frontend/Dockerfile.prod -t "${REGISTRY}/pde/frontend:${TAG}" pde-frontend
-docker push "${REGISTRY}/pde/frontend:${TAG}"
+docker build -t "localhost:5000/pde/backend:$TAG"  pde-backend
+docker push "localhost:5000/pde/backend:$TAG"
+docker build -f pde-frontend/Dockerfile.prod -t "localhost:5000/pde/frontend:$TAG" pde-frontend
+docker push "localhost:5000/pde/frontend:$TAG"
 ```
 
 ---
 
-### **Phase 6: Git Repo**
+### Phase 4 — Ingress-nginx
 
-**Check remote:**
+**Check:**
+```powershell
+kubectl get pods -n ingress-nginx
+# Expected: ingress-nginx-controller-* Running
+ping pde.local   # Expected: 127.0.0.1
+```
+
+**If missing:**
+```powershell
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+kubectl wait --namespace ingress-nginx `
+    --for=condition=ready pod `
+    --selector=app.kubernetes.io/component=controller `
+    --timeout=120s
+```
+
+---
+
+### Phase 5 — App Images in Registry
+
+**Check:**
+```powershell
+curl http://localhost:5000/v2/_catalog
+# Expected: {"repositories":["pde/backend","pde/frontend"]}
+```
+
+**If missing — rebuild and push:**
+```powershell
+cd C:\Users\Home\Desktop\project\PDE
+$TAG = "dev"
+docker build -t "localhost:5000/pde/backend:$TAG"  pde-backend
+docker push "localhost:5000/pde/backend:$TAG"
+docker build -f pde-frontend/Dockerfile.prod -t "localhost:5000/pde/frontend:$TAG" pde-frontend
+docker push "localhost:5000/pde/frontend:$TAG"
+```
+
+---
+
+### Phase 6 — Git Remote
+
+**Check:**
 ```powershell
 cd C:\Users\Home\Desktop\project\PDE
 git remote -v
 git log --oneline -3
 ```
 
-**If changes weren't pushed:**
+**If there are uncommitted changes:**
 ```powershell
 git add .
 git commit -m "recovery: restore state after restart"
@@ -155,238 +176,165 @@ git push
 
 ---
 
-### **Phase 7: ArgoCD**
+### Phase 7 — ArgoCD
 
-**Check if ArgoCD namespace exists:**
+**Check:**
 ```powershell
 kubectl get pods -n argocd
+# Expected: argocd-server-*, argocd-repo-server-*, etc. all Running
 ```
 
-**If missing, reinstall:**
+**If ArgoCD namespace is gone:**
 ```powershell
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 kubectl wait --for=condition=available --timeout=180s -n argocd deployment/argocd-server
+kubectl apply -f local-k8s/argocd/application.yaml
 ```
 
-**Restart port-forward to ArgoCD UI:**
+**Start port-forward and get admin password:**
 ```powershell
-# Kill old port-forward if it exists (check Task Manager)
-# Then run:
-kubectl port-forward svc/argocd-server -n argocd 8081:443
-# (Leave this terminal open; UI is at https://localhost:8081)
+Start-Process -FilePath "cmd" `
+    -ArgumentList "/c kubectl port-forward svc/argocd-server -n argocd 8081:443" `
+    -WindowStyle Hidden
+
+# Retrieve password (never stored in scripts):
+$b = kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}"
+[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b))
+# UI: https://localhost:8081  (admin / <password above>)
 ```
 
-**Get admin password again:**
-```powershell
-$pwd = kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}"
-[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($pwd))
-```
-
-**Deploy the PDE Application:**
+**Re-apply the PDE Application if it disappeared:**
 ```powershell
 cd C:\Users\Home\Desktop\project\PDE
 kubectl apply -f local-k8s/argocd/application.yaml
-
-# Wait for it to sync (check ArgoCD UI at https://localhost:8081)
-# Expected: pde app tile shows Synced + Healthy (green)
-```
-
-**Verify app is running:**
-```powershell
-kubectl get pods -n pde
-# Expected: postgres-*, pde-backend-*, pde-frontend-* all Running
+kubectl get application pde -n argocd -w
+# Wait for: Synced + Healthy
 ```
 
 ---
 
-### **Phase 8: Jenkins**
+### Phase 8 — Jenkins
 
-**Check if Jenkins container exists:**
+> **Critical**: Always use the **`jenkins-pde:latest`** custom image — not `jenkins/jenkins:lts`. The custom image has Docker CLI, Python 3.11, and Node.js pre-installed. The stock image lacks Docker CLI and the pipeline will fail on the first build step.
+
+**Check:**
 ```powershell
 docker ps | Select-String "jenkins"
+docker inspect jenkins --format "{{.Config.Image}}"
+# Expected: jenkins-pde:latest
 ```
 
-**If missing, create it:**
+**If Jenkins container is stopped (normal after reboot):**
 ```powershell
-docker run -d --name jenkins --network kind `
-  -p 8080:8080 -p 50000:50000 `
-  -v jenkins_home:/var/jenkins_home `
-  -v //var/run/docker.sock://var/run/docker.sock `
-  jenkins/jenkins:lts
+docker start jenkins
+# UI available at http://localhost:8080
+```
 
-# Get unlock password
+**If Jenkins container is gone:**
+
+Step 1 — Build the custom image (from repo root, one-time or after Dockerfile changes):
+```powershell
+cd C:\Users\Home\Desktop\project\PDE
+docker build -t jenkins-pde:latest -f local-k8s/jenkins/Dockerfile .
+```
+
+Step 2 — Start Jenkins with Docker socket mounted (PowerShell / Docker Desktop):
+```powershell
+docker run -d `
+    --name jenkins `
+    --network kind `
+    --group-add 0 `
+    -p 8080:8080 -p 50000:50000 `
+    -v jenkins_home:/var/jenkins_home `
+    -v //var/run/docker.sock://var/run/docker.sock `
+    jenkins-pde:latest
+```
+
+> **`//var/run/docker.sock://var/run/docker.sock`** — double slashes required in PowerShell/Git Bash on Windows (Docker Desktop). Use single slashes on Linux/macOS.
+
+Step 3 — Unlock (only needed if `jenkins_home` volume was wiped):
+```powershell
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
-
-# Visit http://localhost:8080, paste password, install suggested plugins
+# Open http://localhost:8080, paste password, install suggested plugins
 ```
 
-**Give Jenkins Docker CLI:**
+Step 4 — Recreate credentials and pipeline job (only if `jenkins_home` was wiped):
+- See **PHASE8-JENKINS-MANUAL-SETUP.md** Steps 2–3.
+
+**Verify Docker works inside Jenkins:**
 ```powershell
-docker exec -u root jenkins sh -c "apt-get update && apt-get install -y docker.io"
+docker exec jenkins docker ps
+# Expected: list of host containers (not an error)
 ```
-
-**Add git credentials (in Jenkins UI):**
-- Go to Manage Jenkins → Credentials → System → Global credentials
-- Add Credentials → Kind: "Username with password"
-- Username: your GitHub username
-- Password: GitHub Personal Access Token
-- ID: `git-creds`
-
-**Create pipeline job (in Jenkins UI):**
-- New Item → name: `pde-local` → Pipeline
-- Pipeline → "Pipeline script from SCM"
-- SCM: Git → Repo URL: `https://github.com/farooqui-owais/pde.git`
-- Credentials: `git-creds`
-- Script Path: `local-k8s/Jenkinsfile.k8s`
-- Save → Build Now
 
 ---
 
-### **Phase 9: Prometheus & Grafana**
+### Phase 9 — Prometheus & Grafana
 
-**Check if monitoring namespace exists:**
+**Check:**
 ```powershell
 kubectl get pods -n monitoring
+# Expected: alertmanager-*, grafana-*, prometheus-*, node-exporter-* all Running
 ```
 
-**If missing, install:**
+**If monitoring namespace is gone:**
 ```powershell
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 helm install monitoring prometheus-community/kube-prometheus-stack `
-  -n monitoring --create-namespace `
-  -f C:\Users\Home\Desktop\project\PDE\monitoring\prometheus-values-local.yaml
+    -n monitoring --create-namespace `
+    -f C:\Users\Home\Desktop\project\PDE\monitoring\prometheus-values-local.yaml
 
 kubectl apply -f C:\Users\Home\Desktop\project\PDE\monitoring\alerting-rules.yaml
-
-# Note: load-grafana-dashboards.sh uses bash; on Windows, manually add dashboards via Grafana UI
 ```
 
-**Access Grafana:**
-```powershell
-kubectl port-forward svc/monitoring-grafana -n monitoring 3000:80
-# Visit http://localhost:3000
-# Login: admin / pde-grafana-admin
+**Access Grafana + Prometheus (after running start-port-forwards.ps1):**
+```
+Grafana    : http://localhost:3000  (admin / pde-grafana-admin)
+Prometheus : http://localhost:9090
 ```
 
 ---
 
-## Full Restart Automation
+## Complete Nuke & Rebuild
 
-Create a **batch restart script** that brings everything up in order:
+Only needed if everything is broken beyond recovery (takes ~10 minutes):
 
-Save as `restart-all.ps1`:
-```powershell
-$ErrorActionPreference = "Stop"
-
-Write-Host "=== PDE Stack Recovery ===" -ForegroundColor Cyan
-
-# Phase 2: Cluster
-Write-Host "1. Checking kind cluster..." -ForegroundColor Yellow
-$clusters = kind get clusters
-if (-not $clusters -or $clusters -notcontains "pde-dev") {
-    Write-Host "   Cluster missing, creating..." -ForegroundColor Yellow
-    kind create cluster --name pde-dev --config local-k8s/kind-config.yaml
-}
-kubectl wait --for=condition=ready node pde-dev-control-plane --timeout=120s
-
-# Phase 3: Registry
-Write-Host "2. Checking local registry..." -ForegroundColor Yellow
-$registry = docker ps | Select-String "kind-registry"
-if (-not $registry) {
-    Write-Host "   Registry missing, creating..." -ForegroundColor Yellow
-    docker run -d --restart=always -p "127.0.0.1:5000:5000" --network bridge --name kind-registry registry:2
-    docker network connect kind kind-registry
-}
-
-# Phase 4: Ingress
-Write-Host "3. Checking ingress-nginx..." -ForegroundColor Yellow
-$ingress = kubectl get deployment -n ingress-nginx 2>$null
-if (-not $ingress) {
-    Write-Host "   Ingress missing, installing..." -ForegroundColor Yellow
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-    kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
-}
-
-# Phase 7: ArgoCD
-Write-Host "4. Checking ArgoCD..." -ForegroundColor Yellow
-$argocd = kubectl get deployment -n argocd 2>$null
-if (-not $argocd) {
-    Write-Host "   ArgoCD missing, installing..." -ForegroundColor Yellow
-    kubectl create namespace argocd
-    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-    kubectl wait --for=condition=available --timeout=180s -n argocd deployment/argocd-server
-}
-
-# Apply PDE Application
-Write-Host "5. Applying PDE Application..." -ForegroundColor Yellow
-kubectl apply -f local-k8s/argocd/application.yaml
-
-Write-Host "✓ Stack recovery complete!" -ForegroundColor Green
-Write-Host "  - Cluster: https://127.0.0.1:63569 (k8s API)"
-Write-Host "  - ArgoCD: https://localhost:8081 (after: kubectl port-forward svc/argocd-server -n argocd 8081:443)"
-Write-Host "  - App: http://pde.local (once ArgoCD syncs)"
-```
-
-Run it after restart:
-```powershell
-cd C:\Users\Home\Desktop\project\PDE
-.\local-k8s\scripts\restart-all.ps1
-```
-
----
-
-## Summary: What Persists After Restart
-
-| Component | Persists? | How to Recover |
-|-----------|-----------|---|
-| Docker images (backend/frontend:dev) | ✓ Yes (on host disk) | Auto-available; push again if needed |
-| Kind cluster data | ✓ Partially (etcd in container) | Cluster survives if container survives; recreate if lost |
-| Local registry data | ✓ Yes (docker volume `kind-registry`) | Volumes persist; container restart = data survives |
-| ArgoCD config | ✓ Yes (etcd in cluster) | Survives cluster restart; reinstall only if cluster deleted |
-| Jenkins jobs | ✓ Yes (jenkins_home volume) | Volume persists; container restart = jobs survive |
-| Git history | ✓ Yes (.git folder) | Always on disk; safe |
-| Application data (PDE DB) | ✓ Yes (PG persistent volume) | Survives if PVC isn't deleted; check `kubectl get pvc -n pde` |
-
----
-
-## If Everything is Lost
-
-**Complete nuke & rebuild from git** (only takes 5-10 min):
 ```powershell
 cd C:\Users\Home\Desktop\project\PDE
 
 # Clean everything
 kind delete cluster --name pde-dev
 docker rm -f kind-registry jenkins
-docker volume prune -f
+docker volume rm jenkins_home
+# (do NOT prune the docker build cache — it makes rebuilds much faster)
 
-# Rebuild
+# Rebuild cluster + registry
 kind create cluster --name pde-dev --config local-k8s/kind-config.yaml
-docker run -d --restart=always -p "127.0.0.1:5000:5000" --network bridge --name kind-registry registry:2
+docker run -d --restart=always -p "127.0.0.1:5000:5000" --name kind-registry registry:2
 docker network connect kind kind-registry
 
-# Rebuild images
+# Build Jenkins image
+docker build -t jenkins-pde:latest -f local-k8s/jenkins/Dockerfile .
+
+# Seed registry with initial images
 $TAG = "dev"
-docker build -t "localhost:5000/pde/backend:$TAG" pde-backend
+docker build -t "localhost:5000/pde/backend:$TAG"  pde-backend
 docker push "localhost:5000/pde/backend:$TAG"
 docker build -f pde-frontend/Dockerfile.prod -t "localhost:5000/pde/frontend:$TAG" pde-frontend
 docker push "localhost:5000/pde/frontend:$TAG"
 
-# Then follow Phase 7+ manually or use restart-all.ps1
+# Then follow local-k8s/README.md Steps 3-9
 ```
 
 ---
 
-## Contact Checkpoint
+## Before System Shutdown (Save State)
 
-**Before system shutdown, run:**
 ```powershell
 cd C:\Users\Home\Desktop\project\PDE
 git add .
-git commit -m "checkpoint: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') before restart"
+git commit -m "checkpoint: $(Get-Date -Format 'yyyy-MM-dd HH:mm') before shutdown"
 git push
 ```
-
-This ensures all uncommitted state is safe on GitHub.

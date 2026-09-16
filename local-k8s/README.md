@@ -1,236 +1,326 @@
-# PDE (DakhalNama) — Local Kubernetes + CI/CD Practice Setup
+# PDE (DakhalNama) — Local Kubernetes CI/CD Setup
 
-Full local stack for the PDE project: **kind** (Kubernetes) + a **local Docker
-registry** + **ingress-nginx** + **Jenkins** (CI) + **ArgoCD** (GitOps CD) +
-**Prometheus/Grafana** (observability). Zero cloud accounts required.
-
-**Confidence note (per your standing preference):** this setup is built from
-the actual files in your PDE.zip — the Helm chart, Dockerfiles, k8s manifests,
-and monitoring configs I reference below are things I read directly from your
-project, not assumed. Version numbers for external tools (kind, Helm charts,
-ArgoCD, ingress-nginx) reflect my last known-good versions as of my knowledge
-cutoff (Jan 2026) — I've flagged the specific ones worth double-checking
-against upstream docs before you install, since these projects release
-frequently.
+Full local stack: **kind** (Kubernetes-in-Docker) + **local Docker registry** + **ingress-nginx** + **Jenkins** (CI) + **ArgoCD** (GitOps CD) + **Prometheus/Grafana** (observability). Zero cloud account required.
 
 ---
 
-## 0. What I changed in your project, and why
+## Architecture Overview
+
+```
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  Developer Machine (Docker Desktop for Windows)                   │
+  │                                                                    │
+  │  ┌─────────────┐    push image     ┌──────────────────┐           │
+  │  │  Jenkins     │──────────────────▶│  kind-registry   │           │
+  │  │  (container) │                   │  localhost:5000   │           │
+  │  │             │   git push        └────────┬─────────┘           │
+  │  │             │──────────────────▶ GitHub  │ pull                 │
+  │  └─────────────┘                    repo    │                      │
+  │                                     │       │                      │
+  │  ┌──────────────────────────────────▼───────▼─────────────────┐  │
+  │  │  kind cluster "pde-dev"                                      │  │
+  │  │                                                              │  │
+  │  │  ┌──────────┐  detects git change  ┌──────────────────────┐ │  │
+  │  │  │ ArgoCD   │◀─────────────────────│  helm/pde/           │ │  │
+  │  │  │ (argocd) │     values-local.yaml│  values-local.yaml   │ │  │
+  │  │  └────┬─────┘                      └──────────────────────┘ │  │
+  │  │       │ deploys                                              │  │
+  │  │  ┌────▼──────────────────────────────────┐                  │  │
+  │  │  │  namespace: pde                        │                  │  │
+  │  │  │  postgres / pde-backend / pde-frontend │                  │  │
+  │  │  └───────────────────────────────────────┘                  │  │
+  │  │                                                              │  │
+  │  │  ┌─────────────────────────────┐                            │  │
+  │  │  │  namespace: monitoring       │                            │  │
+  │  │  │  Prometheus + Grafana        │                            │  │
+  │  │  └─────────────────────────────┘                            │  │
+  │  └──────────────────────────────────────────────────────────────┘  │
+  └──────────────────────────────────────────────────────────────────┘
+```
+
+**CI/CD boundary**: Jenkins builds + pushes images and bumps image tags in `values-local.yaml`. ArgoCD detects the commit and syncs the cluster. Jenkins never runs `helm upgrade` or `kubectl apply` for the app.
+
+---
+
+## Files Changed in Your Project
 
 | File | Change | Why |
 |---|---|---|
-| `pde-backend/requirements.txt` | added `prometheus-fastapi-instrumentator==7.0.0` | your `monitoring/prometheus-values.yaml` already had a scrape job for `pde-backend` `/metrics`, but the backend never exposed that endpoint — verify this version against PyPI before pinning it long-term |
-| `pde-backend/app/main.py` | added `Instrumentator().instrument(app).expose(app, endpoint="/metrics", ...)` | actually exposes `/metrics`, GET-only so it passes your CSRF middleware unchanged |
-| `pde-frontend/src/api/axios.js` | `\|\|` → `??` for the `VITE_API_BASE_URL` fallback | lets the prod image ship an intentionally **empty** base URL (same-origin requests through nginx's `/api` proxy) without falling back to `localhost:8000` |
-| `pde-frontend/Dockerfile.prod` | **new file** | your `helm/pde/templates/frontend-deployment.yaml` already expected port 80 + `/nginx-health` (i.e. an nginx-served static build), but the existing `pde-frontend/Dockerfile` runs the Vite **dev server** on port 5173. That mismatch meant the Helm chart's frontend deployment would never actually have worked as written. `Dockerfile.prod` is a multi-stage build (`vite build` → serve via your existing `nginx.conf`) that matches what the chart expects. Your original `Dockerfile` and `docker-compose.yml` workflow are untouched. |
-| `helm/pde/values-local.yaml` | **new file** | kind/local-registry/ingress-nginx overrides (your existing `values-dev.yaml` targets Docker Desktop's built-in k8s, which shares its daemon with `docker build` — kind is a separate Docker container and needs a registry instead) |
-| `monitoring/prometheus-values-local.yaml` | **new file** | laptop-sized version of your EKS-oriented `prometheus-values.yaml` (smaller storage, no SMTP dependency) |
-| `local-k8s/**` | **new directory** | everything below: kind config, registry/dashboard scripts, the k8s-targeted Jenkinsfile, and the ArgoCD Application manifest |
+| `pde-backend/requirements.txt` | added `prometheus-fastapi-instrumentator==7.0.0` | exposes `/metrics` endpoint so Prometheus can scrape the backend |
+| `pde-backend/app/main.py` | added `Instrumentator().instrument(app).expose(...)` | actually exposes `/metrics` — the scrape job in `prometheus-values.yaml` would silently get 404s without this |
+| `pde-frontend/src/api/axios.js` | `\|\|` → `??` for `VITE_API_BASE_URL` fallback | lets the prod image ship an intentionally empty base URL (same-origin `/api` proxy) without falling back to `localhost:8000` |
+| `pde-frontend/Dockerfile.prod` | new file | the Helm chart's `frontend-deployment.yaml` expects port 80 + `/nginx-health`; the existing `Dockerfile` runs the Vite dev server on port 5173 — that mismatch meant Helm would never work. `Dockerfile.prod` is a multi-stage nginx build. The original `Dockerfile` + `docker-compose.yml` are untouched |
+| `helm/pde/values-local.yaml` | new file | kind/local-registry/ingress-nginx overrides for the local cluster |
+| `monitoring/prometheus-values-local.yaml` | new file | laptop-sized kube-prometheus-stack (small storage, no SMTP) |
+| `local-k8s/**` | new directory | everything below: kind config, registry/dashboard scripts, Jenkinsfile, ArgoCD Application manifest, Jenkins custom image |
 
-Nothing in `on-premise/`, `aws/`, `deploy/`, or your original `k8s/*.yaml` was
-touched — those remain valid for their original (systemd / EKS / Docker
-Desktop) targets.
+Nothing in `on-premise/`, `aws/`, `deploy/`, or the original `k8s/*.yaml` was touched.
 
 ---
 
-## 1. Prerequisites
+## Prerequisites
 
-- Docker Desktop (or Docker Engine) running
-- `kubectl`
-- `kind` — I believe v0.23+ is a safe baseline, but check `kind --version` against https://kind.sigs.k8s.io/ for the current release
-- `helm` v3
-- `git`, plus a git remote you can push to (see §6 if you want this fully offline)
+| Tool | Minimum version | Check |
+|---|---|---|
+| Docker Desktop | 4.x | `docker --version` |
+| `kubectl` | 1.28+ | `kubectl version --client` |
+| `kind` | 0.23+ | `kind --version` |
+| `helm` | 3.x | `helm version` |
+| `git` | any | `git --version` |
 
-Rough resource budget for kind + ingress-nginx + Postgres + backend + frontend
-+ kube-prometheus-stack + Jenkins container all running at once: **8GB+ RAM**
-allocated to Docker is a reasonable starting point on a laptop. If things feel
-sluggish, stop the Jenkins container between pipeline runs — it doesn't need
-to run continuously.
+**Resource budget**: 8 GB+ RAM allocated to Docker Desktop is a safe starting point for the full stack (kind + ingress + Postgres + backend + frontend + kube-prometheus-stack + Jenkins). Stop Jenkins between pipeline runs when not needed — it's the heaviest idle consumer.
 
 ---
 
-## 2. Create the kind cluster
+## Step 1 — Create the Kind Cluster
 
-```bash
-cd PDE   # repo root
+```powershell
+cd C:\Users\Home\Desktop\project\PDE
 kind create cluster --name pde-dev --config local-k8s/kind-config.yaml
 kubectl cluster-info --context kind-pde-dev
 ```
 
-## 3. Local registry (no cloud registry involved)
+---
 
-```bash
-bash local-k8s/scripts/setup-local-registry.sh
+## Step 2 — Start the Local Docker Registry
+
+```powershell
+# On Windows use Git Bash or WSL to run the .sh script,
+# OR use the PowerShell equivalent below:
+
+# PowerShell equivalent:
+docker run -d --restart=always -p "127.0.0.1:5000:5000" --name kind-registry registry:2
+docker network connect kind kind-registry
 ```
 
-This starts a `registry:2` container on `localhost:5000` and wires it into
-the `kind` Docker network so cluster nodes can pull from it too (see the
-comments in `local-k8s/kind-config.yaml` for how the containerd mirror is
-configured).
-
-## 4. Install ingress-nginx (kind-specific manifest)
-
-kind ships a provider-specific ingress-nginx manifest that matches the
-`ingress-ready=true` node label set in `kind-config.yaml`:
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
-  --timeout=120s
-```
-
-Then map a local hostname to it — add this line to `/etc/hosts`
-(`C:\Windows\System32\drivers\etc\hosts` on Windows):
-```
-127.0.0.1 pde.local
-```
-
-## 5. Seed the local registry with an initial image (before ArgoCD's first sync)
-
-`values-local.yaml` is set to `pullPolicy: Always` with `tag: dev` — that tag
-has to exist in the registry before anything can deploy successfully:
-
-```bash
-bash local-k8s/scripts/build-and-push-local.sh dev
-```
-
-## 6. Get a git remote ArgoCD can watch
-
-ArgoCD needs to poll an actual git repository — pick ONE:
-
-- **Simplest — GitHub/GitLab:** push this repo (with all the changes above)
-  to a repo you control, private is fine. Add ArgoCD repo credentials if
-  private: `argocd repo add <url> --username <u> --password <token>` (via the
-  ArgoCD CLI, once installed).
-- **Fully offline — local Gitea:** run a one-container git server so nothing
-  leaves your machine:
-  ```bash
-  docker run -d --name local-gitea -p 3001:3000 -p 2222:22 \
-    --network kind -v gitea-data:/data gitea/gitea:latest
-  ```
-  Then create a repo via `http://localhost:3001`, push this project to it,
-  and use `http://local-gitea.kind:3000/<user>/PDE.git` (or the container's
-  IP on the `kind` network) as the ArgoCD `repoURL` — I haven't verified the
-  exact in-cluster DNS name Gitea's default config expects, so check its
-  `app.ini` `ROOT_URL` setting if cloning fails from inside the cluster.
-
-Once you've picked one, edit the `repoURL` placeholder in
-`local-k8s/argocd/application.yaml` and the `GIT_REPO_URL` placeholder in
-`local-k8s/Jenkinsfile.k8s`, then commit and push this whole project.
-
-## 7. Install ArgoCD
-
-```bash
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-kubectl wait --for=condition=available --timeout=180s -n argocd deployment/argocd-server
-
-kubectl port-forward svc/argocd-server -n argocd 8081:443 &
-```
-- UI: https://localhost:8081 (self-signed cert — accept the browser warning)
-- Username: `admin`
-- Password: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d`
-
-## 8. Deploy the app via ArgoCD
-
-```bash
-kubectl apply -f local-k8s/argocd/application.yaml
-```
-Watch it sync:
-```bash
-kubectl get application pde -n argocd -w
-```
-Once `Synced`/`Healthy`, visit **http://pde.local**. Register a user, log in
-— reference data (districts/offices/article types) seeds itself
-automatically on backend startup.
-
-## 9. Jenkins (CI, builds new images, hands off to ArgoCD)
-
-Run Jenkins as a standalone container with the Docker socket mounted so it
-can build/push images, and with git credentials configured for push access:
-
-```bash
-docker run -d --name jenkins --network kind \
-  -p 8080:8080 -p 50000:50000 \
-  -v jenkins_home:/var/jenkins_home \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  jenkins/jenkins:lts
-```
-- UI: http://localhost:8080 (unlock with the password in
-  `docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword`)
-- Install the suggested plugins, then **Git** + **Docker Pipeline** plugins if
-  not already included.
-- Add a credential `git-creds` (Manage Jenkins → Credentials) with push
-  access to the repo from §6.
-- Docker CLI isn't in the base Jenkins image — either use a Jenkins agent
-  image with Docker installed, or `docker exec -u root jenkins sh -c "apt-get
-  update && apt-get install -y docker.io"` as a quick local-only workaround.
-- Create a **Pipeline** job pointing at your repo, script path
-  `local-k8s/Jenkinsfile.k8s`.
-
-Running the pipeline: quality gates → build+push both images with a
-`${BUILD_NUMBER}-<shortsha>` tag → bump `values-local.yaml`'s two `tag:`
-lines → commit + push. ArgoCD picks up that commit (poll interval ~3 min by
-default) and rolls the new images out — that handoff is the actual CI→CD
-boundary in this setup.
-
-## 10. Prometheus + Grafana
-
-```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
-helm install monitoring prometheus-community/kube-prometheus-stack \
-  -n monitoring --create-namespace \
-  -f monitoring/prometheus-values-local.yaml
-
-kubectl apply -f monitoring/alerting-rules.yaml
-bash local-k8s/scripts/load-grafana-dashboards.sh
-```
-
-Access:
-```bash
-kubectl port-forward svc/monitoring-grafana -n monitoring 3000:80 &
-kubectl port-forward svc/monitoring-kube-prometheus-prometheus -n monitoring 9090:9090 &
-```
-- Grafana: http://localhost:3000 — `admin` / `pde-grafana-admin` (from
-  `prometheus-values-local.yaml`) — your two dashboards should already be in
-  the **PDE** folder.
-- Prometheus: http://localhost:9090 → Status → Targets → confirm
-  `pde-backend` is `UP`.
+This starts a `registry:2` container on `localhost:5000` and wires it into the `kind` Docker network so cluster nodes can pull from it (via the containerd mirror in `kind-config.yaml`).
 
 ---
 
-## 11. Verification checklist
+## Step 3 — Install ingress-nginx (kind-specific manifest)
+
+```powershell
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+kubectl wait --namespace ingress-nginx `
+    --for=condition=ready pod `
+    --selector=app.kubernetes.io/component=controller `
+    --timeout=120s
+```
+
+**Add local hostname** — append to `C:\Windows\System32\drivers\etc\hosts` (run Notepad as Administrator):
+```
+127.0.0.1  pde.local
+```
+
+---
+
+## Step 4 — Seed the Local Registry (initial images)
+
+`values-local.yaml` uses `tag: dev` — that tag must exist in the registry before ArgoCD's first sync.
+
+**PowerShell:**
+```powershell
+$TAG = "dev"
+docker build -t "localhost:5000/pde/backend:$TAG"  pde-backend
+docker push "localhost:5000/pde/backend:$TAG"
+
+docker build -f pde-frontend/Dockerfile.prod -t "localhost:5000/pde/frontend:$TAG" pde-frontend
+docker push "localhost:5000/pde/frontend:$TAG"
+```
+
+---
+
+## Step 5 — Configure Git Remote (ArgoCD needs this)
+
+ArgoCD polls a real git repository. Options:
+
+- **GitHub/GitLab (recommended for practice)**: push this repo to a repository you control, then update `repoURL` in `local-k8s/argocd/application.yaml` to your fork URL. Add ArgoCD repo credentials if the repo is private: `argocd repo add <url> --username <u> --password <token>`.
+- **Fully offline — local Gitea**:
+  ```bash
+  docker run -d --name local-gitea -p 3001:3000 --network kind -v gitea-data:/data gitea/gitea:latest
+  ```
+  Create a repo at `http://localhost:3001`, push there, and set `repoURL` to `http://local-gitea.kind:3000/<user>/PDE.git`.
+
+After choosing: update `repoURL` in **both** `local-k8s/argocd/application.yaml` and `GIT_REPO_URL` in `local-k8s/Jenkinsfile.k8s`, then commit and push.
+
+---
+
+## Step 6 — Install ArgoCD
+
+```powershell
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl wait --for=condition=available --timeout=180s -n argocd deployment/argocd-server
+```
+
+**Get the admin password** (PowerShell):
+```powershell
+$b = kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}"
+[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b))
+```
+
+**Start port-forward + open UI:**
+```powershell
+Start-Process -FilePath "cmd" -ArgumentList "/c kubectl port-forward svc/argocd-server -n argocd 8081:443" -WindowStyle Hidden
+# UI: https://localhost:8081  (accept the self-signed cert warning)
+# Login: admin / <password from above>
+```
+
+---
+
+## Step 7 — Deploy the App via ArgoCD
+
+```powershell
+kubectl apply -f local-k8s/argocd/application.yaml
+# Watch the sync (takes ~1-2 min on first run):
+kubectl get application pde -n argocd -w
+```
+
+Once `Synced + Healthy`, visit **http://pde.local**. The backend seeds reference data automatically on first startup.
+
+---
+
+## Step 8 — Jenkins (CI — builds images, hands off to ArgoCD)
+
+Jenkins runs as a **custom Docker container** (`jenkins-pde:latest`) with Docker CLI and Python 3.11 pre-installed. The stock `jenkins/jenkins:lts` image does not have Docker CLI — always use the custom image for this stack.
+
+### 8a — Build the custom Jenkins image
+
+Run from the **repo root**:
+
+```powershell
+docker build -t jenkins-pde:latest -f local-k8s/jenkins/Dockerfile .
+```
+
+This bakes in: Docker CLI, Python 3.11 + venv, Node.js + npm, and the required Jenkins plugins. It takes 2-3 minutes on first build (plugin downloads); subsequent builds are fast due to layer caching.
+
+### 8b — Start Jenkins
+
+**PowerShell (Docker Desktop for Windows):**
+```powershell
+docker run -d `
+    --name jenkins `
+    --network kind `
+    --group-add 0 `
+    -p 8080:8080 -p 50000:50000 `
+    -v jenkins_home:/var/jenkins_home `
+    -v //var/run/docker.sock://var/run/docker.sock `
+    jenkins-pde:latest
+```
+
+> **`--network kind`**: lets Jenkins reach `localhost:5000` (the local registry) and `kind-registry:5000` from inside the container.
+>
+> **`--group-add 0`**: on Docker Desktop, the Docker socket (`/var/run/docker.sock`) is owned by root:root, so Jenkins needs group 0 access to use it.
+>
+> **`//var/run/docker.sock://var/run/docker.sock`**: double slashes are required in PowerShell/Git Bash on Windows for Docker volume path translation. On Linux/macOS use single slashes.
+
+**Unlock Jenkins:**
+```powershell
+docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+# Open http://localhost:8080, paste the password, install suggested plugins
+```
+
+### 8c — Configure Jenkins (UI steps — one time)
+
+1. **Add git credential** (`Manage Jenkins → Credentials → System → Global credentials → Add Credentials`):
+   - Kind: `Username with password`
+   - Username: your GitHub username
+   - Password: your GitHub Personal Access Token (needs `repo` scope)
+   - ID: **`git-creds`** (must match exactly — this ID is referenced in `Jenkinsfile.k8s`)
+
+2. **Create pipeline job** (`New Item → name: pde-local → Pipeline → OK`):
+   - Pipeline definition: `Pipeline script from SCM`
+   - SCM: `Git`
+   - Repository URL: your repo URL
+   - Credentials: `git-creds`
+   - Branch: `*/main`
+   - Script Path: `local-k8s/Jenkinsfile.k8s`
+   - Save
+
+### 8d — Run the pipeline
+
+Click **Build Now** on the `pde-local` job. The pipeline:
+1. Runs backend quality gate (ruff + pytest in a `python:3.11-slim` container)
+2. Runs frontend quality gate (npm ci + build in the Jenkins agent)
+3. Builds + pushes both images with tag `<BUILD_NUMBER>-<git-sha>`
+4. Edits `helm/pde/values-local.yaml` — replaces both image tags
+5. Commits and pushes the values change to your repo
+
+ArgoCD polls the repo every ~3 minutes and rolls out new pods automatically.
+
+---
+
+## Step 9 — Prometheus + Grafana
+
+```powershell
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm install monitoring prometheus-community/kube-prometheus-stack `
+    -n monitoring --create-namespace `
+    -f monitoring/prometheus-values-local.yaml
+
+kubectl apply -f monitoring/alerting-rules.yaml
+```
+
+**Access:**
+```powershell
+# Run start-port-forwards.ps1 (starts Grafana + Prometheus + ArgoCD port-forwards)
+powershell -File local-k8s\scripts\start-port-forwards.ps1
+```
+
+| UI | URL | Login |
+|---|---|---|
+| Grafana | http://localhost:3000 | `admin` / `pde-grafana-admin` |
+| Prometheus | http://localhost:9090 | — |
+
+In Prometheus → Status → Targets, confirm `pde-backend` shows **UP**. In Grafana, the **PDE** folder contains `pde-overview` and `pde-resources` dashboards.
+
+---
+
+## Step 10 — After a Reboot
+
+```powershell
+cd C:\Users\Home\Desktop\project\PDE
+powershell -File local-k8s\scripts\restart-stack.ps1
+powershell -File local-k8s\scripts\start-port-forwards.ps1
+```
+
+See `local-k8s/scripts/RECOVERY-CHECKPOINT.md` for per-component recovery steps.
+
+---
+
+## Verification Checklist
 
 - [ ] `kubectl get pods -n pde` — postgres, backend, frontend all `Running`
-- [ ] http://pde.local loads the DakhalNama login page
-- [ ] Register + log in works end-to-end (JWT + CSRF cookie both same-origin now)
+- [ ] `http://pde.local` — DakhalNama login page loads
+- [ ] Register + log in works (JWT + CSRF same-origin)
 - [ ] `curl http://pde.local/api/health` → `{"status":"ok",...}`
+- [ ] `curl http://pde.local/metrics` — 404 expected (metrics are on the backend pod directly, not via ingress)
 - [ ] Prometheus target `pde-backend` shows `UP`
-- [ ] Grafana **PDE** folder shows `pde-overview` and `pde-resources` dashboards with live data
-- [ ] A Jenkins pipeline run produces a new image tag, and `kubectl get application pde -n argocd` shows a new sync shortly after
+- [ ] Grafana → PDE folder → dashboards show live data
+- [ ] Jenkins pipeline run succeeds → ArgoCD shows new sync → new pods rolled out
 
-## 12. Troubleshooting
+---
 
-- **ArgoCD stuck `OutOfSync`/`Unknown`:** usually a bad `repoURL` or missing
-  repo credentials — `kubectl logs -n argocd deploy/argocd-repo-server`.
-- **Pods stuck `ImagePullBackOff`:** the `dev` (or bumped) tag likely isn't in
-  the registry yet, or the containerd mirror in `kind-config.yaml` didn't
-  apply — recreate the cluster if you edited that file after cluster creation
-  (kind only reads it at creation time).
-- **Frontend loads but API calls fail with CORS errors:** you're probably
-  hitting the backend directly on a different port instead of through
-  `http://pde.local/api/...` — the whole point of the nginx proxy + ingress
-  path routing is to avoid that.
-- **`/metrics` returns 404:** the backend image is stale — rebuild after the
-  `requirements.txt`/`main.py` changes above.
+## Troubleshooting
 
-## 13. Teardown
+| Symptom | Likely Cause | Fix |
+|---|---|---|
+| ArgoCD stuck `OutOfSync` or `Unknown` | Bad `repoURL` or missing repo credentials | `kubectl logs -n argocd deploy/argocd-repo-server` |
+| Pods `ImagePullBackOff` | Tag `dev` (or bumped tag) not in registry | Push images: `docker push localhost:5000/pde/backend:dev` |
+| `docker: command not found` in Jenkins | Using stock `jenkins/jenkins:lts` instead of `jenkins-pde:latest` | Rebuild + restart Jenkins with the custom image (§8a–b) |
+| Git push fails in Jenkins (403) | Token missing `repo` scope, or ID mismatch | Verify `git-creds` ID and token scope in Jenkins credentials |
+| Frontend loads but API calls fail (CORS) | Hitting backend directly, not via `http://pde.local/api/...` | Use the ingress path — nginx proxies `/api/*` to the backend |
+| `/metrics` returns 404 | Backend image is stale — built before `requirements.txt`/`main.py` changes | Rebuild: `docker build -t localhost:5000/pde/backend:dev pde-backend && docker push ...` |
+| Port-forward disconnects | Normal — port-forwards die after a while | Re-run `start-port-forwards.ps1` |
+| `kubectl wait` timeout on node | Node IP changed after reboot, kubeconfig stale | `kind export kubeconfig --name pde-dev` |
 
-```bash
+---
+
+## Teardown
+
+```powershell
 kind delete cluster --name pde-dev
-docker rm -f kind-registry jenkins local-gitea 2>/dev/null || true
-docker volume rm jenkins_home gitea-data 2>/dev/null || true
+docker rm -f kind-registry jenkins local-gitea 2>$null
+docker volume rm jenkins_home gitea-data 2>$null
 ```
