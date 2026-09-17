@@ -60,6 +60,28 @@ if (-not $argocdNs) {
 kubectl apply -f "$ProjectRoot\local-k8s\argocd\application.yaml" 2>$null | Out-Null
 Write-Host "      OK"
 
+# --- [6/6] Monitoring (Prometheus + Grafana + ServiceMonitor) ---
+Write-Host "[6/6] Monitoring..."
+$monitoringNs = kubectl get namespace monitoring 2>$null
+if (-not $monitoringNs) {
+    Write-Host "      Installing kube-prometheus-stack..."
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>$null | Out-Null
+    helm repo update 2>$null | Out-Null
+    helm install monitoring prometheus-community/kube-prometheus-stack `
+        -n monitoring --create-namespace `
+        -f "$ProjectRoot\monitoring\prometheus-values-local.yaml" 2>$null | Out-Null
+    kubectl wait --for=condition=available --timeout=180s -n monitoring `
+        deployment/monitoring-grafana 2>$null | Out-Null
+}
+# Scrape config + alert rules. The ServiceMonitor is the ONLY scrape mechanism
+# now (additionalScrapeConfigs was removed from the helm values), so it must
+# be applied on every fresh install - without it Prometheus silently scrapes
+# nothing and the pde-backend target never appears. Both applies are
+# idempotent, so they also refresh rules on already-working clusters.
+kubectl apply -f "$ProjectRoot\monitoring\service-monitor.yaml" 2>$null | Out-Null
+kubectl apply -f "$ProjectRoot\monitoring\alerting-rules.yaml" 2>$null | Out-Null
+Write-Host "      OK"
+
 Write-Host ""
 Write-Host "============================================================"
 Write-Host " Stack Recovery Complete!"

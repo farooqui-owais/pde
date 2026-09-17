@@ -259,8 +259,14 @@ helm install monitoring prometheus-community/kube-prometheus-stack `
     -n monitoring --create-namespace `
     -f monitoring/prometheus-values-local.yaml
 
+kubectl apply -f monitoring/service-monitor.yaml
 kubectl apply -f monitoring/alerting-rules.yaml
 ```
+
+> The ServiceMonitor is **required** — it is now the only scrape mechanism for
+> the backend (the old `additionalScrapeConfigs` job was removed from
+> `prometheus-values-local.yaml`). Verify at http://localhost:9090 → Status →
+> Targets: `pde-backend` should be `UP` after the backend pods are Running.
 
 **Access:**
 ```powershell

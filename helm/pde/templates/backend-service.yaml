@@ -5,6 +5,13 @@ metadata:
   namespace: {{ include "pde.namespace" . }}
   labels:
     {{- include "pde.labels" . | nindent 4 }}
+    # Stable selector labels (also on the Pod selector below). Added so
+    # monitoring/service-monitor.yaml can select this Service and use
+    # app.kubernetes.io/name as jobLabel — that keeps the Prometheus job
+    # named "pde-backend", which monitoring/alerting-rules.yaml relies on
+    # (up{job="pde-backend"}) and the dashboards display.
+    app.kubernetes.io/name: {{ include "pde.name" . }}-backend
+    app.kubernetes.io/component: backend
 spec:
   type: {{ .Values.backend.service.type }}
   ports:

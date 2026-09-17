@@ -47,6 +47,17 @@ pipeline {
         GIT_CREDENTIALS_ID  = "git-creds"
     }
 
+    triggers {
+        // Poll GitHub every ~5 minutes (H = jittered minute, spread the load
+        // across Jenkins instances). This makes the pipeline start on its own
+        // after a merge to main, no manual "Build Now" and no GitHub webhook
+        // needed. A webhook to http://<jenkins>:8080/github-webhook/ is the
+        // zero-latency alternative — pollSCM stays as the fallback either way.
+        // Bump commits pushed by this pipeline go to the deploy/local branch,
+        // which this job does not build (Branches: */main), so no feedback loop.
+        pollSCM('H/5 * * * *')
+    }
+
     stages {
 
         // ---------------------------------------------------------------

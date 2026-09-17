@@ -286,8 +286,15 @@ helm install monitoring prometheus-community/kube-prometheus-stack `
     -n monitoring --create-namespace `
     -f C:\Users\Home\Desktop\project\PDE\monitoring\prometheus-values-local.yaml
 
+kubectl apply -f C:\Users\Home\Desktop\project\PDE\monitoring\service-monitor.yaml
 kubectl apply -f C:\Users\Home\Desktop\project\PDE\monitoring\alerting-rules.yaml
 ```
+
+> **`service-monitor.yaml` is required, not optional.** It is now the ONLY scrape
+> mechanism for the backend (the old `additionalScrapeConfigs` job was removed
+> from `prometheus-values-local.yaml`). Skip it and Prometheus shows zero
+> targets — `up{job="pde-backend"}` never becomes 1. Verify at
+> http://localhost:9090 → Status → Targets: `pde-backend` should be `UP`.
 
 **Access Grafana + Prometheus (after running start-port-forwards.ps1):**
 ```

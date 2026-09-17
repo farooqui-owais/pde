@@ -80,6 +80,11 @@ The pipeline pushes image tag updates back to your git repository. It needs a Pe
    - **Script Path**: `local-k8s/Jenkinsfile.k8s`
 5. Click **Save**
 
+> **Automatic triggering**: the Jenkinsfile declares `triggers { pollSCM('H/5 * * * *') }`,
+> so once the job has run once, Jenkins polls GitHub every ~5 minutes and builds
+> automatically on new `main` commits — no manual "Build Now" required. A GitHub
+> webhook to `http://<jenkins>:8080/github-webhook/` is the zero-latency alternative.
+
 ---
 
 ## Step 4 — Run the Pipeline

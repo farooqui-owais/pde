@@ -1,0 +1,45 @@
+# =============================================================================
+# PDE Backend ServiceMonitor
+#
+# Replaces the previous additionalScrapeConfigs job in
+# prometheus-values-local.yaml / prometheus-values.yaml -- the idiomatic
+# kube-prometheus-stack way to discover scrape targets. Scrapes the SAME
+# endpoint (/metrics on backend-svc, port name "http", 15s interval), so
+# nothing about the metrics contract changes.
+#
+# Install (same as alerting-rules.yaml):
+#   kubectl apply -f monitoring/service-monitor.yaml
+#
+# HOW IT MATCHES:
+#   selector.matchLabels -> must match the backend-svc Service metadata
+#   labels (set in helm/pde/templates/backend-service.yaml).
+#   label "release: monitoring" is REQUIRED: kube-prometheus-stack defaults
+#   serviceMonitorSelectorNilUsesHelmValues=true, which only picks up
+#   ServiceMonitors labeled with the Helm release name ("monitoring").
+#
+#   jobLabel: app.kubernetes.io/name makes the job name "pde-backend" --
+#   identical to the old scrape config's job_name, so
+#   monitoring/alerting-rules.yaml (up{job="pde-backend"}) and the Grafana
+#   dashboards keep working unchanged.
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pde-backend
+  namespace: pde
+  labels:
+    release: monitoring # must match the kube-prometheus-stack Helm release name
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pde-backend
+      app.kubernetes.io/component: backend
+  namespaceSelector:
+    matchNames:
+      - pde
+  # Take the job name from this label ON THE SELECTED Service (value: "pde-backend")
+  jobLabel: app.kubernetes.io/name
+  endpoints:
+    - port: http # port name on backend-svc (containerPort 8000)
+      path: /metrics # exposed by prometheus-fastapi-instrumentator in the backend
+      interval: 15s # same as the previous scrape config

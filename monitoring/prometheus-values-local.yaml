@@ -40,23 +40,12 @@ prometheus:
           resources:
             requests:
               storage: 2Gi
-    # Same scrape job as the EKS values file — points at the pde-backend
-    # /metrics endpoint added in pde-backend/app/main.py.
-    additionalScrapeConfigs:
-      - job_name: 'pde-backend'
-        kubernetes_sd_configs:
-          - role: endpoints
-            namespaces:
-              names: [pde]
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_service_name]
-            regex: backend-svc
-            action: keep
-          - source_labels: [__meta_kubernetes_endpoint_port_name]
-            regex: http
-            action: keep
-        metrics_path: /metrics
-        scrape_interval: 15s
+    # NOTE: the pde-backend scrape job previously defined here as
+    # additionalScrapeConfigs has been replaced by the idiomatic CRD way:
+    #   kubectl apply -f monitoring/service-monitor.yaml
+    # Same target (backend-svc /metrics, port "http", 15s) and the job is
+    # still named "pde-backend" (via ServiceMonitor jobLabel), so the
+    # alerting rules and Grafana dashboards are unaffected.
 
 grafana:
   enabled: true

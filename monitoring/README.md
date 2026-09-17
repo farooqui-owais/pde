@@ -25,7 +25,13 @@ helm install monitoring prometheus-community/kube-prometheus-stack \
 3. Apply custom alerting rules:
 ```bash
 kubectl apply -f monitoring/alerting-rules.yaml
+kubectl apply -f monitoring/service-monitor.yaml
 ```
+
+`service-monitor.yaml` tells Prometheus to scrape the backend's `/metrics`
+endpoint (via `backend-svc`, port `http`, 15s interval). The job is named
+`pde-backend` — the same name the old `additionalScrapeConfigs` job used — so
+the alert rules and dashboards need no changes.
 
 ## Grafana Dashboards
 
