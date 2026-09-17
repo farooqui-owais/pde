@@ -1,0 +1,38 @@
+# Local only. Compose v2.24.4+ is required for !override.
+# The base file retains the existing database volume and project identity.
+services:
+  db:
+    mem_limit: 512m
+    mem_reservation: 256m
+    memswap_limit: 512m
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "work_mem=4MB", "-c", "maintenance_work_mem=64MB", "-c", "max_connections=30"]
+    stop_grace_period: 60s
+  backend:
+    mem_limit: 256m
+    mem_reservation: 128m
+    memswap_limit: 256m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 90s
+      retries: 5
+  frontend:
+    build:
+      context: ./pde-frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ""
+        NODE_OPTIONS: --max-old-space-size=768
+    mem_limit: 128m
+    mem_reservation: 64m
+    memswap_limit: 128m
+    environment: !override
+      NGINX_WORKER_PROCESSES: "1"
+    ports: !override
+      - "5173:80"
+    volumes:
+      - ./pde-frontend/nginx.compose.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy

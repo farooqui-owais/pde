@@ -84,3 +84,22 @@ postgres:
   image: postgres:16-alpine
   storage: 1Gi
   password: postgres
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  args:
+    - -c
+    - shared_buffers=128MB
+    - -c
+    - work_mem=4MB
+    - -c
+    - maintenance_work_mem=64MB
+    - -c
+    - max_connections=30
+  strategy:
+    type: Recreate
+

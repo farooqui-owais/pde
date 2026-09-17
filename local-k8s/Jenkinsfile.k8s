@@ -33,6 +33,12 @@
 pipeline {
     agent any
 
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 45, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
     environment {
         REGISTRY    = "localhost:5000"
         // Tag format: <build-number>-<git-short-sha>  e.g. "42-a1b2c3d"
@@ -100,6 +106,8 @@ pipeline {
                     trap cleanup EXIT
                     trap 'exit 1' HUP INT TERM
                     test_container=$(docker create \
+                        --memory=512m --memory-swap=512m --cpus=1 \
+                        --label pde.memory-worker=true \
                         -w /app \
                         -e DATABASE_URL="sqlite:///:memory:" \
                         -e DEBUG="True" \
@@ -126,21 +134,40 @@ pipeline {
         // ---------------------------------------------------------------
         // Stage 3 — Frontend Quality Gate
         //
-        // npm ci  : clean, reproducible install from package-lock.json
-        // lint    : || true is intentional for local practice — remove
-        //           the '|| true' in a production pipeline to break on
-        //           lint failures.
-        // build   : Vite production bundle (validates the build succeeds)
+        // LOW-MEMORY (6 GB Docker Desktop): npm ci + Vite build run inside
+        // a disposable node:20-alpine SIBLING container with a 1 GiB cgroup
+        // cap (swap disabled) and a 768 MiB V8 heap ceiling. The Jenkins
+        // controller's own 1 GiB limit does NOT cap sibling containers, so
+        // capping here is what actually bounds Node's memory.
+        //   lint: || true is intentional for local practice — remove the
+        //         '|| true' in a production pipeline to break on failures.
+        // Same docker-cp pattern as Stage 2 (Jenkins workspace may live in
+        // a named volume a sibling cannot bind-mount).
         // ---------------------------------------------------------------
         stage('Frontend Quality Gate') {
             steps {
-                dir('pde-frontend') {
-                    sh '''
-                        npm ci
-                        npm run lint || true
-                        npm run build
-                    '''
-                }
+                sh '''
+                    set -eu
+                    test_container=''
+                    cleanup() {
+                        if [ -n "$test_container" ]; then
+                            docker rm -f "$test_container" >/dev/null 2>&1 || true
+                        fi
+                    }
+                    trap cleanup EXIT
+                    trap 'exit 1' HUP INT TERM
+                    test_container=$(docker create \
+                        --memory=1g --memory-swap=1g --cpus=1 \
+                        --label pde.memory-worker=true \
+                        -e NODE_OPTIONS=--max-old-space-size=768 \
+                        -w /app \
+                        node:20-alpine \
+                        sh -ec 'npm ci; npm run lint || true; npm run build')
+                    docker cp pde-frontend/. "$test_container:/app"
+                    docker start -a "$test_container"
+                    test_exit=$(docker inspect --format '{{.State.ExitCode}}' "$test_container")
+                    exit "$test_exit"
+                '''
             }
         }
 
@@ -153,20 +180,7 @@ pipeline {
         // ---------------------------------------------------------------
         stage('Build & Push Images') {
             steps {
-                sh """
-                    docker build \
-                        -t ${REGISTRY}/pde/backend:${IMAGE_TAG} \
-                        pde-backend
-
-                    docker push ${REGISTRY}/pde/backend:${IMAGE_TAG}
-
-                    docker build \
-                        -f pde-frontend/Dockerfile.prod \
-                        -t ${REGISTRY}/pde/frontend:${IMAGE_TAG} \
-                        pde-frontend
-
-                    docker push ${REGISTRY}/pde/frontend:${IMAGE_TAG}
-                """
+                sh 'sh local-k8s/scripts/build-low-memory.sh'
             }
         }
 

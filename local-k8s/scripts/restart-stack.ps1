@@ -49,6 +49,26 @@ if (-not $nodes) {
 }
 
 # ---------------------------------------------------------------------------
+# 2b. Low-memory guard: warn when the Docker VM is under memory pressure.
+#     6 GB Docker budget: if less than ~3 GiB is available inside the node,
+#     Jenkins builds and monitoring installs are likely to destabilize pods.
+#     Warning only — never blocks startup.
+# ---------------------------------------------------------------------------
+$kindNode = docker ps --filter "label=io.x-k8s.kind.cluster=pde-dev" --format "{{.Names}}" | Select-Object -First 1
+if ($kindNode) {
+    $memLine = docker exec $kindNode sh -c "grep MemAvailable /proc/meminfo" 2>$null
+    if ($memLine -match 'MemAvailable:\s+(\d+) kB') {
+        $availGiB = [math]::Round([double]$Matches[1] / 1MB, 2)
+        if ($availGiB -lt 3) {
+            Write-Host "WARNING: only ${availGiB} GiB available inside the kind node (< 3 GiB)." -ForegroundColor Yellow
+            Write-Host "Consider NOT starting Jenkins / running builds right now (see MEMORY-MANAGEMENT.md)."
+        } else {
+            Write-Host "Node memory headroom: ${availGiB} GiB available" -ForegroundColor Green
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # 3. Ensure kind-registry is up and on the kind network
 # ---------------------------------------------------------------------------
 $reg = docker inspect -f "{{.State.Running}}" kind-registry 2>$null

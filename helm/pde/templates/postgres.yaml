@@ -24,6 +24,10 @@ metadata:
     app.kubernetes.io/component: database
 spec:
   replicas: 1
+  {{- with .Values.postgres.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: postgres
@@ -35,6 +39,14 @@ spec:
       containers:
         - name: postgres
           image: {{ .Values.postgres.image | default "postgres:16-alpine" }}
+          {{- with .Values.postgres.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.postgres.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - containerPort: 5432
           env:
