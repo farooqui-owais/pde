@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Gracefully stop the PDE local stack (e.g. before shutting down the PC) while
 # KEEPING everything — no data loss, no rebuild needed on next start.
 #

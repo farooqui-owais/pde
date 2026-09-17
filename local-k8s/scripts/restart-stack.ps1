@@ -1,14 +1,14 @@
-# =============================================================================
+﻿# =============================================================================
 # Restart the full PDE local stack after a Windows reboot or Docker restart.
 #
 # WHAT SURVIVES A REBOOT AUTOMATICALLY:
-#   ✓  kind cluster "pde-dev"  (container auto-starts — restart policy on node)
-#   ✓  kind-registry           (created with --restart=always)
-#   ✓  All k8s objects         (pde / argocd / monitoring namespaces, PVCs)
+#   [ok] kind cluster "pde-dev"  (container auto-starts - restart policy on node)
+#   [ok] kind-registry           (created with --restart=always)
+#   [ok] All k8s objects         (pde / argocd / monitoring namespaces, PVCs)
 #
 # WHAT DOES NOT AUTO-START:
-#   ✗  jenkins                 (no --restart policy at creation time)
-#   ✗  kubectl port-forwards   (always manual; run start-port-forwards.ps1)
+#   [no] jenkins                 (no --restart policy at creation time)
+#   [no] kubectl port-forwards   (always manual; run start-port-forwards.ps1)
 #
 # USAGE:
 #   cd C:\Users\Home\Desktop\project\PDE
@@ -57,7 +57,7 @@ if ($reg -ne "true") {
         Write-Host "Starting kind-registry ..." -ForegroundColor Yellow
         docker start kind-registry | Out-Null
     } else {
-        Write-Host "kind-registry container missing — recreating (re-push images afterwards):" -ForegroundColor Yellow
+        Write-Host "kind-registry container missing - recreating (re-push images afterwards):" -ForegroundColor Yellow
         docker run -d --restart=always -p 127.0.0.1:5000:5000 --name kind-registry registry:2
     }
 }
@@ -106,7 +106,7 @@ $stuckOutput = kubectl get pods -A --no-headers 2>$null |
     Select-String "Unknown|Error|CrashLoop"
 if ($stuckOutput) {
     $stuckCount = ($stuckOutput | Measure-Object).Count
-    Write-Host "Found $stuckCount stuck pod(s) — rolling restart in pde + argocd namespaces ..." -ForegroundColor Yellow
+    Write-Host "Found $stuckCount stuck pod(s) - rolling restart in pde + argocd namespaces ..." -ForegroundColor Yellow
     kubectl -n pde    rollout restart deploy 2>$null | Out-Null
     kubectl -n argocd rollout restart deploy 2>$null | Out-Null
     kubectl -n argocd rollout restart statefulset 2>$null | Out-Null
