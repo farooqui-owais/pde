@@ -75,11 +75,10 @@ pipeline {
         // Runs inside the official python:3.11-slim image (same base as
         // pde-backend/Dockerfile) to guarantee version parity with prod.
         //
-        // Windows/Docker Desktop note: $(pwd) inside the Jenkins container
-        // returns a Linux path (/var/jenkins_home/workspace/...). Docker
-        // Desktop correctly translates this to a host bind-mount because
-        // the Jenkins container itself runs inside Docker Desktop's Linux VM.
-        // The bind-mount path therefore never needs to be a Windows path.
+        // Jenkins may store its workspace in a Docker named volume. A sibling
+        // container cannot bind-mount that container-local path from the host.
+        // Copy the source through the Docker API into an isolated test container;
+        // this also works with host-based Jenkins agents and remote daemons.
         //
         // Steps inside the container:
         //   • python3 -m venv  → isolated, clean environment
@@ -90,23 +89,36 @@ pipeline {
         stage('Backend Quality Gate') {
             steps {
                 sh '''
-                    docker run --rm \
-                        -v "$(pwd)/pde-backend:/app" \
+                    set -eu
+                    test -f pde-backend/requirements-dev.txt
+                    test_container=''
+                    cleanup() {
+                        if [ -n "$test_container" ]; then
+                            docker rm -f "$test_container" >/dev/null 2>&1 || true
+                        fi
+                    }
+                    trap cleanup EXIT
+                    trap 'exit 1' HUP INT TERM
+                    test_container=$(docker create \
                         -w /app \
                         -e DATABASE_URL="sqlite:///:memory:" \
                         -e DEBUG="True" \
                         -e SECRET_KEY="ci-test-secret-key-32-chars-long!" \
                         python:3.11-slim \
-                        sh -c "
-                            python3 -m venv .venv
-                            . .venv/bin/activate
-                            pip install --quiet --upgrade pip
-                            pip install --quiet -r requirements-dev.txt
+                        sh -ec "
+                            python3 -m venv /tmp/pde-ci-venv
+                            . /tmp/pde-ci-venv/bin/activate
+                            python -m pip install --quiet --upgrade pip
+                            python -m pip install --quiet -r requirements-dev.txt
                             echo '--- ruff lint ---'
                             ruff check app/
                             echo '--- pytest ---'
                             pytest tests/ --cov=app --cov-report=term-missing -v
-                        "
+                        ")
+                    docker cp pde-backend/. "$test_container:/app"
+                    docker start -a "$test_container"
+                    test_exit=$(docker inspect --format '{{.State.ExitCode}}' "$test_container")
+                    exit "$test_exit"
                 '''
             }
         }
