@@ -16,6 +16,59 @@ This handles steps 1-4 below automatically. Only read further if something fails
 
 ---
 
+## Incident 2026-09-18: API server EOF / control-plane flapping after cold start
+
+**Symptoms seen in `restart-stack.ps1` output:**
+```
+couldn't get current server API group list: Get "https://127.0.0.1:51035/api?timeout=32s": EOF
+```
+plus kube-controller-manager / kube-scheduler CrashLoopBackOff (60+ restarts),
+kube-apiserver liveness failures (`statuscode: 500` on /livez), and transient
+`pods is forbidden ... User "kubernetes-admin"` errors.
+
+**Root cause (measured):** WSL2 disk I/O saturation during the stack cold-start.
+`/proc/pressure/io` spiked to ~85-88% ("some"), etcd reads took 60-100s
+(`'agreement among raft nodes before linearized reading' duration: 1m40s`),
+so the API server timed out, controller-manager lost its leader-election lease
+and crash-looped. Restart loops made it worse (each pod restart re-extracts
+image layers). The transient "Forbidden" errors happen because k8s 1.33 kubeadm
+grants admin via the `kubeadm:cluster-admins` RBAC group, which is only
+reconciled once kube-controller-manager is back up.
+
+**Remedies applied:**
+1. Shed load while the storm passes:
+   ```powershell
+   kubectl scale deploy -n monitoring --all --replicas=0
+   kubectl scale deploy -n argocd     --all --replicas=0
+   # wait ~2 min, verify: docker exec pde-dev-control-plane head -1 /proc/pressure/io
+   kubectl scale deploy -n monitoring --all --replicas=1
+   kubectl scale deploy -n argocd     --all --replicas=1
+   ```
+   Note: ArgoCD self-heal will re-scale its own workloads back up while its
+   controller is down, so scale argocd first / expect to re-run it.
+2. Delete stale duplicate pods from pre-restart ReplicaSets (they persist
+   while the controller-manager is down).
+3. `restart-stack.ps1` now has a **control-plane health gate (section 5b)**
+   that waits for the controller-manager and prints the load-shedding advice
+   above instead of leaving you with silent EOF errors.
+
+**Durable options (pick one):**
+- Raise Docker Desktop resources beyond 8 CPU / 6 GB (Settings → Resources).
+- Or run the stack without `monitoring` when doing local dev:
+  `kubectl scale deploy -n monitoring --all --replicas=0`.
+- Avoid rapid repeated `restart-stack.ps1` runs; each run re-rolls pods.
+
+**Related transient failure:** `pde-frontend` nginx crash with
+`host not found in resolver "kube-dns.kube-system.svc.cluster.local"` is NOT a
+config error — nginx resolves its resolver hostname at startup and fails while
+CoreDNS/etcd is unreachable. It self-recovers; no fix needed.
+
+---
+
+This handles steps 1-4 below automatically. Only read further if something fails.
+
+---
+
 ## Quick Status Check
 
 ```powershell
@@ -83,6 +136,47 @@ kubectl wait --for=condition=ready node pde-dev-control-plane --timeout=120s
 kind export kubeconfig --name pde-dev
 kubectl cluster-info
 ```
+
+**If the node is `NotReady` / `NodeStatusUnknown` (kind node IP drift):**
+
+Symptom — after a Docker Desktop restart, `restart-stack.ps1` stops at the
+`kubectl wait` step with:
+
+```
+E0918 18:02:18 ... memcache.go:265 "Unhandled Error" err="couldn't get current
+server API group list: Get "https://127.0.0.1:51035/api?timeout=32s": EOF"
+```
+
+Cause — Docker Desktop's own Kubernetes cluster (`desktop-control-plane`) and the
+`pde-dev` node share the docker bridge network named `kind`, so whichever starts
+first gets `172.18.0.2`. When Docker Desktop wins, `pde-dev` moves to
+`172.18.0.3`. kind's node entrypoint rewrites the apiserver certificate and
+`scheduler.conf` / `controller-manager.conf` for the new address, but it does
+**not** rewrite `/etc/kubernetes/kubelet.conf`. kubelet therefore dials the old
+address — which is now the *other* cluster's API server:
+
+```
+docker exec pde-dev-control-plane journalctl -u kubelet -n 30 --no-pager
+# x509: certificate signed by unknown authority ... certificate "kubernetes"
+```
+
+Check and fix (also automated as step 2c of `restart-stack.ps1`):
+```powershell
+# what the node really has vs. what kubelet.conf says
+docker inspect -f '{{(index .NetworkSettings.Networks "kind").IPAddress}}' pde-dev-control-plane
+docker exec pde-dev-control-plane grep server: /etc/kubernetes/kubelet.conf
+
+# repoint kubelet at the node's own address (substitute your IPs)
+docker exec pde-dev-control-plane sed -i s#https://172.18.0.2:6443#https://172.18.0.3:6443# /etc/kubernetes/kubelet.conf
+docker exec pde-dev-control-plane systemctl restart kubelet
+
+kubectl wait --for=condition=ready node pde-dev-control-plane --timeout=180s
+```
+
+> The host `kubectl` keeps working (it uses `127.0.0.1:<port>` from
+> `~/.kube/config`), so `kubectl get nodes` may even succeed while the node is
+> `NotReady`. Judge health by the node condition, not by the client's ability to
+> connect.
 
 ---
 

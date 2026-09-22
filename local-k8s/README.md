@@ -295,6 +295,51 @@ See `local-k8s/scripts/RECOVERY-CHECKPOINT.md` for per-component recovery steps.
 
 ---
 
+## Step 11 — SonarQube (optional — kind must be stopped)
+
+Static analysis (bugs, code smells, security issues, duplication, backend
+coverage) runs in its **own session**: SonarQube + its Postgres are capped at
+~3.75 GiB (~2.5 GiB measured) and **do not fit alongside the kind cluster**
+(2.4–2.8 GiB) in a 6 GB Docker VM. See
+`MEMORY-MANAGEMENT.md` → **Mode E**.
+
+```powershell
+# 1. Stop the kind stack to free the memory
+powershell -File local-k8s\scripts\stop-stack.ps1
+
+# 2. Start SonarQube (this also raises vm.max_map_count for Elasticsearch)
+powershell -File local-k8s\scripts\start-sonar.ps1
+
+# 3. One-time UI setup at http://localhost:9000   (login admin / admin)
+#      - change the admin password
+#      - Create Project -> Manually -> key: pde
+#      - My Account -> Security -> Generate Token  (copy it)
+
+# 4. Scan, from the repo root
+docker run --rm -e SONAR_HOST_URL=http://host.docker.internal:9000 `
+  -e SONAR_TOKEN=<token> -v "${PWD}:/usr/src" sonarsource/sonar-scanner-cli
+#      dashboard: http://localhost:9000/dashboard?id=pde
+
+# 5. Back to Kubernetes
+powershell -File local-k8s\scripts\stop-sonar.ps1
+powershell -File local-k8s\scripts\restart-stack.ps1
+```
+
+| Item | Where |
+|---|---|
+| Server URL | http://localhost:9000 |
+| Compose project | `pde-sonar` → `docker-compose.sonar.yml` (repo root) |
+| Analysis scope | `sonar-project.properties` (repo root; project key `pde`) |
+| Full runbook | `sonar/SONARQUBE.md` |
+| Plan / rationale | `sonar/SONARQUBE-IMPLEMENTATION-PLAN.md` |
+
+`start-sonar.ps1` enforces the two prerequisites for you: it offers to stop the
+kind stack, and it sets `vm.max_map_count = 524288` before starting (Docker
+Desktop resets that value to 262144 on every restart, so it is re-applied each
+run). Data survives `stop-sonar.ps1` — use `-Purge` to delete it.
+
+---
+
 ## Verification Checklist
 
 - [ ] `kubectl get pods -n pde` — postgres, backend, frontend all `Running`
@@ -305,6 +350,7 @@ See `local-k8s/scripts/RECOVERY-CHECKPOINT.md` for per-component recovery steps.
 - [ ] Prometheus target `pde-backend` shows `UP`
 - [ ] Grafana → PDE folder → dashboards show live data
 - [ ] Jenkins pipeline run succeeds → ArgoCD shows new sync → new pods rolled out
+- [ ] *(optional — Mode E)* `Invoke-RestMethod http://localhost:9000/api/system/status` → `status: UP`; project `pde` shows Python + JS/TS metrics
 
 ---
 

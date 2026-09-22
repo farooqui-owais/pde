@@ -9,6 +9,8 @@ PC back on?  ──►  restart-stack.ps1        (wake everything up)
 Ready to work?──► start-port-forwards.ps1  (open the doors to the UIs)
 restart-all.ps1  (older spare — mostly covered by restart-stack.ps1)
 setup-webhooks.ps1 (optional — instant GitOps sync, no ~3 min ArgoCD lag)
+Code quality?  ──► start-sonar.ps1        (Mode E — STOP KIND FIRST)
+                   stop-sonar.ps1         (keeps data; add -Purge to wipe it)
 ```
 
 ---
@@ -43,13 +45,22 @@ This is your **main "wake up" script** and the smartest one. It:
    safety net)
 3. **Yells with instructions if the cluster was deleted** (the one
    unrecoverable case)
-4. Starts the registry and re-attaches it to the cluster's network
-5. **Starts Jenkins** (Jenkins does NOT auto-start after reboot — only this
+4. **Repairs kind node IP drift** — the node container's docker IP can change on
+   every Docker Desktop restart, and `/etc/kubernetes/kubelet.conf` inside it is
+   *never* rewritten by kind. If the address moved, this step re-points kubelet
+   at the node's real address and restarts it (otherwise the node sits
+   `NotReady` / `NodeStatusUnknown` forever)
+5. Starts the registry and re-attaches it to the cluster's network
+6. **Starts Jenkins** (Jenkins does NOT auto-start after reboot — only this
    script starts it)
-6. Points kubectl at the cluster and waits for the node to be Ready
-7. **Finds pods stuck in error states and rolling-restarts them** (fixes pods
-   that got confused during the shutdown)
-8. Prints a status summary
+7. Waits for the API server, then points kubectl at the cluster and waits for the
+   node to be Ready (kubectl's `memcache.go ... EOF` lines during the first ~30s
+   are harmless retry noise)
+8. **Finds pods stuck in real error states** (`Error`, `CrashLoopBackOff`,
+   `ImagePull*`) and rolling-restarts them. `Unknown` pods are *not* restarted —
+   that state only means kubelet could not report while it was disconnected, and
+   mass-restarting everything on a 6 GB VM just creates a second pod wave
+9. Prints a status summary
 
 **Why:** After a reboot, some things wake up on their own, some don't, and some
 wake up broken. This handles all three cases in one command.
@@ -155,6 +166,72 @@ waiting for the next ~3-minute poll.
 
 ---
 
+## 6. `start-sonar.ps1` — 🔍 Use when: you want a code-quality scan (optional)
+
+**What it does:** Brings up the self-hosted SonarQube stack (`pde-sonar` +
+`pde-sonar-db`) in its own compose project, and enforces the two prerequisites
+that are easy to forget:
+
+1. **Checks whether the kind cluster is running** and offers to stop it — the
+   cluster (2.4–2.8 GiB) plus SonarQube (~2.4 GiB, cap 3.5 GiB) do not fit in the 6 GB Docker
+   VM. Refuses to continue if you say no.
+2. **Raises `vm.max_map_count` to 524288** inside the Docker Desktop WSL2 VM.
+   SonarQube's embedded Elasticsearch refuses to bootstrap at the default
+   262144 — and Docker Desktop **resets it on every restart**, so this has to
+   happen on every run, not once.
+3. Starts the stack, attaches `pde-sonar` to the `kind` Docker **network** if
+   that network exists (the network outlives a stopped cluster).
+4. Polls `http://localhost:9000/api/system/status` until it reports `UP`
+   (first boot runs a DB migration + builds the Elasticsearch index: expect
+   2–5 minutes on this machine).
+5. Prints memory usage, an OOMKilled check, and the first-login steps.
+
+**Why:** SonarQube is **Mode E** — a deliberately separate session, never
+concurrent with kind. Doing it by hand means remembering the kernel sysctl,
+which is exactly the kind of thing that gets forgotten after a reboot.
+
+**Usage:**
+```powershell
+powershell -File local-k8s\scripts\start-sonar.ps1
+```
+
+Then open http://localhost:9000 (`admin` / `admin`, forces a password change)
+and scan from the repo root:
+```powershell
+docker run --rm -e SONAR_HOST_URL=http://host.docker.internal:9000 `
+  -e SONAR_TOKEN=<token> -v "${PWD}:/usr/src" sonarsource/sonar-scanner-cli
+```
+
+**Not needed for normal development** — skip it unless you actually want the
+analysis. Full runbook: `sonar/SONARQUBE.md`.
+
+---
+
+## 7. `stop-sonar.ps1` — 🧹 Use when: finished scanning, want Kubernetes back
+
+**What it does:** Detaches `pde-sonar` from the `kind` network, then brings the
+SonarQube compose project down **without `-v`** — so `sonar_pgdata`, the
+Elasticsearch data, plugins, logs and your analysis history all survive. Next
+`start-sonar.ps1` resumes where you left off (no re-creating the project or
+the token).
+
+**`-Purge` = irreversible.** Deletes the volumes too: every project, token,
+quality gate and scan history is gone. It asks you to type `delete` to confirm.
+
+**Why:** You almost always want to *pause* SonarQube, not reset it — the
+analysis database is the valuable part and rebuilding it costs a slow first
+boot every time.
+
+**Usage:**
+```powershell
+powershell -File local-k8s\scripts\stop-sonar.ps1            # keep data
+powershell -File local-k8s\scripts\stop-sonar.ps1 -Purge     # wipe everything
+```
+
+Follow it with `restart-stack.ps1` to get the kind cluster back.
+
+---
+
 ## Cheat Sheet
 
 | Situation | Run this |
@@ -164,10 +241,15 @@ waiting for the next ~3-minute poll.
 | "I can't open localhost:8081/3000/9090" | `start-port-forwards.ps1` |
 | Fresh machine, nothing installed | `restart-all.ps1` *(or follow local-k8s/README.md)* |
 | ArgoCD sync feels slow (~3 min poll) | `setup-webhooks.ps1` *(optional, needs a tunnel)* |
+| Want a code-quality scan | `start-sonar.ps1` *(Mode E — **stop kind first**)* |
+| Finished scanning, want Kubernetes back | `stop-sonar.ps1` then `restart-stack.ps1` |
 | Docker isn't running at all | None — start Docker Desktop first, all scripts fail |
 
-## ⚠️ Two things to remember
+## ⚠️ Three things to remember
 
 1. **Order matters:** Docker Desktop → `restart-stack.ps1` → `start-port-forwards.ps1`
 2. **Jenkins is special:** it never auto-starts after a reboot. If Jenkins is
    down, it's because you skipped `restart-stack.ps1`.
+3. **`start-sonar.ps1` is the exception to the "kind first" rule:** SonarQube
+   needs kind *stopped*. It also re-raises `vm.max_map_count` every run because
+   Docker Desktop resets it on restart.

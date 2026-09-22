@@ -110,3 +110,8 @@ pde-antigravity-documentation
 
 # Local Netlify folder (the .netlify CLI cache — always local/machine-specific)
 .netlify
+
+# ---- SonarQube (local, optional — see sonar/) ----
+# Scratch directory written by the SonarScanner during an analysis. Never a
+# source artifact; deleting it is always safe.
+.scannerwork/

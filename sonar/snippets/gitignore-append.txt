@@ -1,0 +1,4 @@
+# ---- SonarQube (local, optional - see sonar/) ----
+# Scratch directory written by the SonarScanner during an analysis. Never a
+# source artifact; deleting it is always safe.
+.scannerwork/

@@ -599,6 +599,11 @@ class PropertyDetailCreate(BaseModel):
     potkharaba_area: Optional[Decimal] = Decimal("0.0")
     other_right_mr: Optional[str] = None
     other_right_en: Optional[str] = None
+    non_cultivable_area: Optional[Decimal] = Decimal("0.0")
+    boundaries_en: Optional[str] = None
+    boundaries_mr: Optional[str] = None
+    electricity_board: Optional[str] = None
+    consumer_number: Optional[str] = None
 
     @field_validator("district", "village_name")
     @classmethod
@@ -652,6 +657,11 @@ class PropertyDetailOut(BaseModel):
     potkharaba_area: Optional[Decimal] = Decimal("0.0")
     other_right_mr: Optional[str] = None
     other_right_en: Optional[str] = None
+    non_cultivable_area: Optional[Decimal] = Decimal("0.0")
+    boundaries_en: Optional[str] = None
+    boundaries_mr: Optional[str] = None
+    electricity_board: Optional[str] = None
+    consumer_number: Optional[str] = None
     property_code: Optional[str] = None
 
 
@@ -675,6 +685,7 @@ class PuiVerifyResponse(BaseModel):
 class PartyDetailCreate(BaseModel):
     party_type: str
     entity_type: Optional[str] = None
+    salutation: Optional[str] = None
     surname_en: Optional[str] = None
     first_name_en: Optional[str] = None
     middle_name_en: Optional[str] = None
@@ -682,6 +693,9 @@ class PartyDetailCreate(BaseModel):
     first_name_mr: Optional[str] = None
     middle_name_mr: Optional[str] = None
     age: Optional[int] = None
+    occupation: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[str] = None  # ISO date (YYYY-MM-DD) from UI date input
     is_bank: bool = False
     is_stamp_purchaser: bool = False
     is_presentor: bool = False
@@ -713,6 +727,9 @@ class PartyDetailCreate(BaseModel):
     email: Optional[str] = None
     is_document_signed: bool = True
     is_exemption_section_88: bool = False
+    execution_by: Optional[str] = None
+    uid_consent_aadhaar: bool = False
+    district_mr: Optional[str] = None
 
     # Gap 2 fields
     party_sr_no: Optional[int] = None
@@ -787,6 +804,7 @@ class PartyDetailOut(BaseModel):
     document_entry_id: str
     party_type: Optional[str] = None
     entity_type: Optional[str] = None
+    salutation: Optional[str] = None
     surname_en: Optional[str] = None
     first_name_en: Optional[str] = None
     middle_name_en: Optional[str] = None
@@ -794,6 +812,9 @@ class PartyDetailOut(BaseModel):
     first_name_mr: Optional[str] = None
     middle_name_mr: Optional[str] = None
     age: Optional[int] = None
+    occupation: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[str] = None
     is_bank: bool = False
     is_stamp_purchaser: bool = False
     is_presentor: bool = False
@@ -827,6 +848,10 @@ class PartyDetailOut(BaseModel):
     email: Optional[str] = None
     is_document_signed: bool = True
     is_exemption_section_88: bool = False
+
+    execution_by: Optional[str] = None
+    uid_consent_aadhaar: bool = False
+    district_mr: Optional[str] = None
 
     party_sr_no: Optional[int] = None
     alias_name_mr: Optional[str] = None
@@ -878,6 +903,7 @@ class IdentificationDetailCreate(BaseModel):
     address_en: Optional[str] = None
     address_mr: Optional[str] = None
     age: int
+    date_of_birth: Optional[str] = None  # ISO date (YYYY-MM-DD) from UI date input
     pin_code: Optional[str] = None
     identification_proof: str
     proof_number: str
@@ -929,6 +955,7 @@ class IdentificationDetailOut(BaseModel):
     first_name_mr: Optional[str] = None
     middle_name_mr: Optional[str] = None
     age: Optional[int] = None
+    date_of_birth: Optional[str] = None
     address_en: Optional[str] = None
     address_mr: Optional[str] = None
     pin_code: Optional[str] = None

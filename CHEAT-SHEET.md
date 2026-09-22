@@ -42,6 +42,7 @@ cd C:\Users\Home\Desktop\project\PDE
 | Jenkins | http://localhost:8080 |
 | Grafana | http://localhost:3000 |
 | Prometheus | http://localhost:9090 |
+| SonarQube *(Mode E only)* | http://localhost:9000 |
 
 ---
 
@@ -60,6 +61,28 @@ cd C:\Users\Home\Desktop\project\PDE
 git add . && git commit -m "eod checkpoint" && git push
 Shutdown PC
 ```
+
+---
+
+## SonarQube — Code Quality Scan (OPTIONAL)
+
+**Rule: kind must be STOPPED first.** SonarQube uses ~2.4 GB (3.5 GB cap) and does not fit
+next to the kind cluster in the 6 GB Docker VM (see `MEMORY-MANAGEMENT.md` →
+Mode E).
+
+```powershell
+.\local-k8s\scripts\stop-stack.ps1     # 1. free the memory
+.\local-k8s\scripts\start-sonar.ps1    # 2. SonarQube up (also fixes vm.max_map_count)
+
+# 3. scan (first time: create project "pde" + token in the UI at localhost:9000)
+docker run --rm -e SONAR_HOST_URL=http://host.docker.internal:9000 `
+  -e SONAR_TOKEN=<token> -v "${PWD}:/usr/src" sonarsource/sonar-scanner-cli
+
+.\local-k8s\scripts\stop-sonar.ps1     # 4. keep data (add -Purge to wipe)
+.\local-k8s\scripts\restart-stack.ps1  # 5. Kubernetes back
+```
+
+Full runbook: `sonar/SONARQUBE.md`
 
 ---
 

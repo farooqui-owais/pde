@@ -1,0 +1,174 @@
+# =============================================================================
+# SonarQube Community Build — LOCAL, SELF-HOSTED, OPTIONAL (Mode E)
+#
+# STAGED FILE. When implemented, copy this to the repo root.
+#
+# Run with an isolated compose project name so it can never collide with the
+# application stack's pde_* containers/volumes defined in docker-compose.yml:
+#
+#   docker compose -p pde-sonar -f docker-compose.sonar.yml up -d
+#
+# Prefer the wrapper script, which enforces the two hard prerequisites:
+#   powershell -File local-k8s\scripts\start-sonar.ps1
+#
+# PREREQUISITE 1 — MEMORY (6 GB Docker Desktop)
+#   This stack needs ~2.8 GiB. The kind cluster needs 2.4-2.8 GiB. They do NOT
+#   fit together in a 5.79 GiB Docker VM. kind must be stopped first.
+#   See MEMORY-MANAGEMENT.md -> Mode E.
+#
+# PREREQUISITE 2 — KERNEL
+#   SonarQube's embedded Elasticsearch requires vm.max_map_count >= 524288.
+#   Docker Desktop's WSL2 VM reports 262144 by default and the value does not
+#   survive a Docker Desktop restart, so start-sonar.ps1 re-applies it:
+#     wsl -d docker-desktop sysctl -w vm.max_map_count=524288
+#   (A `sysctls:` entry cannot be relied on here: vm.* is not namespaced, so
+#    Docker/Compose may reject it per-container. It is left commented below.)
+#
+# INTENTIONALLY NOT INCLUDED
+#   * No `depends_on` on the application's db service and no reuse of the
+#     pde_pgdata volume — SonarQube's schema must never share the app database.
+#   * No `kind` network attachment in this file — it is done by the start
+#     script only when the `kind` network actually exists, so this file also
+#     works on a machine where kind was never created.
+# =============================================================================
+
+services:
+
+  sonarqube:
+    image: sonarqube:community
+    # Pin a date tag instead of the floating `community` tag if you want fully
+    # repeatable deployments once verified, e.g. `2026.1.5-community`.
+    container_name: pde-sonar
+    hostname: sonarqube          # scanners/Jenkins resolve http://sonarqube:9000
+    restart: "no"                # Mode E: start deliberately, never auto-start
+    read_only: true              # official example compose does this; requires
+                                 # writable volumes below + a tmpfs on /tmp
+    depends_on:
+      sonar-db:
+        condition: service_healthy
+
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar      # local only; never reachable off-box
+      # --- MEMORY TUNING (6 GB Docker VM) ---------------------------------
+      # All three JVMs are given the image's DEFAULT 512m heap. BOTH
+      # reductions attempted on this machine FAILED — do not re-apply them:
+      #
+      #  1) SONAR_SEARCH_JAVAOPTS with -Xms != -Xmx:
+      #       "bootstrap check failure [1] of [1]: initial heap size
+      #        [268435456] not equal to maximum heap size [536870912]"
+      #       "Elasticsearch died while starting up, exit code: 78"
+      #     Elasticsearch REQUIRES initial heap == maximum heap.
+      #
+      #  2) SONAR_WEB_JAVAOPTS="-Xmx256m":
+      #       "java.lang.OutOfMemoryError: Java heap space" during the startup
+      #       DB migration (org.apache.ibatis...), then
+      #       "Process[Web Server] is stopped" -> "SonarQube is stopped".
+      #     The container exited 0 with OOMKilled=false, so this looks like a
+      #     silent death — it is a JVM heap limit, not a cgroup limit.
+      #
+      # On a 6 GB VM, tune mem_limit below / stop kind — never trim heaps.
+      SONAR_WEB_JAVAOPTS:    "-Xms256m -Xmx512m"
+      SONAR_CE_JAVAOPTS:     "-Xms256m -Xmx512m"
+      SONAR_SEARCH_JAVAOPTS: "-Xms512m -Xmx512m"
+      # --- first-boot diagnostics ------------------------------------------
+      SONAR_LOG_LEVEL: INFO
+
+    ports:
+      - "9000:9000"
+
+    volumes:
+      - sonar_data:/opt/sonarqube/data              # ES indexes + server state
+      - sonar_extensions:/opt/sonarqube/extensions  # 3rd-party plugins
+      - sonar_logs:/opt/sonarqube/logs
+      - sonar_temp:/opt/sonarqube/temp
+
+    # Required: read_only:true makes /tmp unwritable otherwise, and SonarQube
+    # 2026.1+ creates /tmp/.java_pid<PID> sockets for ES 8.x initialization.
+    tmpfs:
+      - /tmp:size=256M,mode=1777
+
+    # Belt-and-braces for the kernel prerequisite of PREREQUISITE 2.
+    # ulimits always apply; the sysctls line is normally rejected because vm.*
+    # is host-wide — uncomment ONLY if your Docker/Compose version accepts it.
+    ulimits:
+      nofile:
+        soft: 131072
+        hard: 131072
+      nproc:
+        soft: 8192
+        hard: 8192
+    # sysctls:
+    #   vm.max_map_count: "524288"
+
+    # 3.5 GiB cap, swap disabled (memswap == mem) so an overrun surfaces as a
+    # fast OOMKilled instead of silently thrashing the whole 6 GB VM.
+    # Sized for three 512m-heap JVMs + metaspace/native/off-heap + the wrapper.
+    # A 2560m cap with 256m web heaps FAILED on this machine (web JVM OOM'd
+    # during the startup DB migration). See the memory-tuning note above.
+    mem_limit: 3584m
+    memswap_limit: 3584m
+
+    # Docker's default stop timeout is 10 s, which hard-kills in-flight
+    # compute-engine tasks. Official guidance is to raise it.
+    stop_grace_period: 120s
+
+    # NOTE ON HEALTHCHECK: intentionally omitted. The SonarQube image does not
+    # guarantee curl/wget in PATH, so an in-container HTTP healthcheck can
+    # produce a permanently "unhealthy" container on some tags. start-sonar.ps1
+    # polls http://localhost:9000/api/system/status from the host instead.
+    # If you want one and have confirmed curl exists, use:
+    # healthcheck:
+    #   test: ["CMD", "curl", "-fsS", "http://localhost:9000/api/system/status"]
+    #   interval: 15s
+    #   timeout: 5s
+    #   retries: 20
+    #   start_period: 180s
+
+    networks:
+      default:
+        aliases:
+          - sonarqube
+
+  sonar-db:
+    # postgres:16-alpine matches this repo's existing choice in
+    # docker-compose.yml and helm/pde/values-local.yaml (postgres 16), so the
+    # local practice stays consistent with the app stack.
+    image: postgres:16-alpine
+    container_name: pde-sonar-db
+    restart: "no"
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonar
+    # Laptop-sized Postgres. SonarQube is a single-writer, low-concurrency
+    # workload here (one scanner at a time).
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "max_connections=30"
+    volumes:
+      - sonar_pgdata:/var/lib/postgresql/data
+    mem_limit: 256m
+    memswap_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar -d sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+
+volumes:
+  # Separate from the application's pde_pgdata on purpose: SonarQube must never
+  # share a database schema with the app (and only ONE SonarQube instance may
+  # ever attach to sonar_pgdata).
+  sonar_data:
+  sonar_extensions:
+  sonar_logs:
+  sonar_temp:
+  sonar_pgdata:
+

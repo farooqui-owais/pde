@@ -169,8 +169,8 @@ export default function PropertyDetails() {
       non_cultivable_area: prop.non_cultivable_area !== null && prop.non_cultivable_area !== undefined ? String(prop.non_cultivable_area) : "0.0",
       boundaries_en: prop.boundaries_en || "",
       boundaries_mr: prop.boundaries_mr || "",
-      electricity_board: "MSEDCL",
-      consumer_number: "028512345678",
+      electricity_board: prop.electricity_board || "MSEDCL",
+      consumer_number: prop.consumer_number || "",
     });
   }
 
@@ -242,6 +242,11 @@ export default function PropertyDetails() {
       potkharaba_area: form.potkharaba_area ? parseFloat(form.potkharaba_area) : 0.0,
       other_right_mr: form.other_right_mr,
       other_right_en: form.other_right_en,
+      non_cultivable_area: form.non_cultivable_area ? parseFloat(form.non_cultivable_area) : 0.0,
+      boundaries_en: form.boundaries_en,
+      boundaries_mr: form.boundaries_mr,
+      electricity_board: form.electricity_board,
+      consumer_number: form.consumer_number,
     };
 
     try {

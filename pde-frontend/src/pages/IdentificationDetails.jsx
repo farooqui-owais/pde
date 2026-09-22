@@ -201,7 +201,7 @@ export default function IdentificationDetails() {
 
           <label>{t("identification.dateOfBirth")}</label>
           <input type="date" value={form.date_of_birth} onChange={(e) => update("date_of_birth", e.target.value)} />
-          <span />
+          <span /><span />
 
           <label>{t("identification.colProof")}</label>
           <select value={form.identification_proof} onChange={(e) => update("identification_proof", e.target.value)}>

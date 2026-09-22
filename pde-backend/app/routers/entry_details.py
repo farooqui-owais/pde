@@ -78,6 +78,11 @@ def _property_out(p: models.PropertyDetail) -> schemas.PropertyDetailOut:
         potkharaba_area=p.potkharaba_area,
         other_right_mr=p.other_right_mr,
         other_right_en=p.other_right_en,
+        non_cultivable_area=p.non_cultivable_area,
+        boundaries_en=p.boundaries_en,
+        boundaries_mr=p.boundaries_mr,
+        electricity_board=p.electricity_board,
+        consumer_number=p.consumer_number,
     )
 
 
@@ -98,6 +103,34 @@ def add_property(
         **data,
     )
     db.add(record)
+    db.commit()
+    db.refresh(record)
+    return _property_out(record)
+
+
+@router.put("/{entry_id}/properties/{property_id}", response_model=schemas.PropertyDetailOut)
+def update_property(
+    entry_id: str,
+    property_id: str,
+    payload: schemas.PropertyDetailCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Update an existing property. Mirrors add_property but re-serialises the
+    attribute-type list (Survey/C.T.S./Plot numbers) into the JSON column."""
+    _entry_or_404(db, entry_id, current_user)
+    record = (
+        db.query(models.PropertyDetail)
+        .filter(models.PropertyDetail.id == property_id, models.PropertyDetail.document_entry_id == entry_id)
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Property not found")
+    data = payload.model_dump()
+    attrs = data.pop("attributes", [])
+    for key, value in data.items():
+        setattr(record, key, value)
+    record.attributes = _attrs_to_json(attrs)
     db.commit()
     db.refresh(record)
     return _property_out(record)

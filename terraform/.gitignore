@@ -1,0 +1,22 @@
+# Local .terraform dirs (providers, modules, state backups)
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Sensitive tfvars - NEVER commit real values (tfvars here contain only
+# placeholders; add e.g. secret.auto.tfvars if you must, and gitignore it)
+*.auto.tfvars
+override.tf
+override.tf.json
+
+# Plan files
+*.tfplan
+plan.out
+
+# CLI
+.terraform.lock.hcl
+# (comment the line above if you want to commit provider locks - recommended)

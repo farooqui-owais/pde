@@ -36,8 +36,17 @@ def _ensure_additive_columns():
         "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS potkharaba_area NUMERIC(14,2) DEFAULT 0.0",
         "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS other_right_mr VARCHAR(200)",
         "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS other_right_en VARCHAR(200)",
+        "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS non_cultivable_area NUMERIC(14,2) DEFAULT 0.0",
+        "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS boundaries_en TEXT",
+        "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS boundaries_mr TEXT",
+        "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS electricity_board VARCHAR(120)",
+        "ALTER TABLE property_details ADD COLUMN IF NOT EXISTS consumer_number VARCHAR(60)",
         # Gap 2: Party Details missing columns
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS entity_type VARCHAR(80)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS salutation VARCHAR(20)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS occupation VARCHAR(120)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS gender VARCHAR(20)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS date_of_birth VARCHAR(10)",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS party_sr_no INTEGER",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS alias_name_mr VARCHAR(150)",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS alias_name_en VARCHAR(150)",
@@ -55,6 +64,10 @@ def _ensure_additive_columns():
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS seller_middle_name VARCHAR(80)",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS seller_last_name VARCHAR(80)",
         "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS mobile_number_verified BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS execution_by VARCHAR(40)",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS uid_consent_aadhaar BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE party_details ADD COLUMN IF NOT EXISTS district_mr VARCHAR(80)",
+        "ALTER TABLE identification_details ADD COLUMN IF NOT EXISTS date_of_birth VARCHAR(10)",
         # Presentation Details ("Token Details") view — screenshots: /frmTokenDetails
         "ALTER TABLE article_types ADD COLUMN IF NOT EXISTS description VARCHAR(255)",
         "ALTER TABLE document_entries ADD COLUMN IF NOT EXISTS presenter_type VARCHAR(60)",
@@ -102,6 +115,16 @@ def _ensure_additive_columns():
             add_col_sqlite("party_details", "seller_middle_name", "VARCHAR(80)")
             add_col_sqlite("party_details", "seller_last_name", "VARCHAR(80)")
             add_col_sqlite("party_details", "mobile_number_verified", "BOOLEAN DEFAULT 0")
+            add_col_sqlite("party_details", "execution_by", "VARCHAR(40)")
+            add_col_sqlite("party_details", "uid_consent_aadhaar", "BOOLEAN DEFAULT 0")
+            add_col_sqlite("party_details", "district_mr", "VARCHAR(80)")
+            add_col_sqlite("identification_details", "date_of_birth", "VARCHAR(10)")
+            # Property Details: boundaries + electricity / non-cultivable fields
+            add_col_sqlite("property_details", "non_cultivable_area", "NUMERIC(14,2) DEFAULT 0.0")
+            add_col_sqlite("property_details", "boundaries_en", "TEXT")
+            add_col_sqlite("property_details", "boundaries_mr", "TEXT")
+            add_col_sqlite("property_details", "electricity_board", "VARCHAR(120)")
+            add_col_sqlite("property_details", "consumer_number", "VARCHAR(60)")
             # Presentation Details ("Token Details") view
             add_col_sqlite("article_types", "description", "VARCHAR(255)")
             add_col_sqlite("document_entries", "presenter_type", "VARCHAR(60)")

@@ -319,6 +319,11 @@ class PropertyDetail(Base):
     potkharaba_area = Column(Numeric(14, 2), nullable=True, default=0.0)
     other_right_mr = Column(String(200), nullable=True)
     other_right_en = Column(String(200), nullable=True)
+    non_cultivable_area = Column(Numeric(14, 2), nullable=True, default=0.0)
+    boundaries_en = Column(Text, nullable=True)
+    boundaries_mr = Column(Text, nullable=True)
+    electricity_board = Column(String(120), nullable=True)
+    consumer_number = Column(String(60), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -343,7 +348,11 @@ class PartyDetail(Base):
     surname_mr = Column(String(80), nullable=True)
     first_name_mr = Column(String(80), nullable=True)
     middle_name_mr = Column(String(80), nullable=True)
+    salutation = Column(String(20), nullable=True)
     age = Column(Integer, nullable=True)
+    occupation = Column(String(120), nullable=True)
+    gender = Column(String(20), nullable=True)
+    date_of_birth = Column(String(10), nullable=True)  # ISO date (YYYY-MM-DD) from UI date input
 
     is_bank = Column(Boolean, default=False)
     is_stamp_purchaser = Column(Boolean, default=False)
@@ -402,6 +411,9 @@ class PartyDetail(Base):
     seller_middle_name = Column(String(80), nullable=True)
     seller_last_name = Column(String(80), nullable=True)
     mobile_number_verified = Column(Boolean, default=False)
+    execution_by = Column(String(40), nullable=True)
+    uid_consent_aadhaar = Column(Boolean, default=False)
+    district_mr = Column(String(80), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -428,6 +440,7 @@ class IdentificationDetail(Base):
     address_mr = Column(Text, nullable=True)
 
     age = Column(Integer, nullable=True)
+    date_of_birth = Column(String(10), nullable=True)  # ISO date (YYYY-MM-DD) from UI date input
     pin_code = Column(String(10), nullable=True)
     identification_proof = Column(String(60), nullable=True)
     proof_number = Column(String(60), nullable=True)

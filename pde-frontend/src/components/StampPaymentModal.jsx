@@ -94,7 +94,7 @@ export default function StampPaymentModal({ documentEntryId, defaultAmount, onCl
 
             <label>Franking Serial No.</label>
             <input value={form.franking_serial_no || ""} onChange={(e) => update("franking_serial_no", e.target.value)} />
-            <span className="stamp-multi-note">Multiple Franking / Mudrank, Separated.</span><span />
+            <span className="stamp-multi-note">Multiple Franking / Mudrank, Separated.</span>
 
             <label>Franking Date</label>
             <input type="date" value={form.payment_date || ""} onChange={(e) => update("payment_date", e.target.value)} />
@@ -183,7 +183,7 @@ export default function StampPaymentModal({ documentEntryId, defaultAmount, onCl
 
             <label>Serial No.</label>
             <input value={form.serial_no || ""} onChange={(e) => update("serial_no", e.target.value)} />
-            <span className="stamp-multi-note">Multiple Franking / Mudrank, Separated.</span><span />
+            <span className="stamp-multi-note">Multiple Franking / Mudrank, Separated.</span>
 
             <label>Mudrank Date</label>
             <input type="date" value={form.payment_date || ""} onChange={(e) => update("payment_date", e.target.value)} />
