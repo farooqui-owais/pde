@@ -24,8 +24,13 @@ metadata:
     app.kubernetes.io/component: database
 spec:
   replicas: 1
-  {{- with .Values.postgres.strategy }}
+  # RWO PVC: a rolling update would briefly run TWO pods against the same
+  # data directory (surge pod starts before the old one stops) — that
+  # corrupts WAL ("could not locate a valid checkpoint record"). Recreate
+  # guarantees the old pod is fully terminated before the new one starts.
   strategy:
+    type: Recreate
+  {{- with .Values.postgres.strategy }}
     {{- toYaml . | nindent 4 }}
   {{- end }}
   selector:

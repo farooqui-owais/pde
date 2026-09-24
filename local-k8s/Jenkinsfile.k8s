@@ -235,14 +235,14 @@ pipeline {
                     sh """
                         AUTHENTICATED_URL=\$(echo "${GIT_REPO_URL}" | sed "s|https://|https://\${GIT_USER}:\${GIT_TOKEN}@|")
 
-                        // Push to the automation-only environment branch, NOT main.
-                        // deploy/local is a disposable "pointer" branch: it is
-                        // force-updated on every build to (main HEAD + bump commit).
-                        // ArgoCD's local app (targetRevision: deploy/local) watches
-                        // only this branch — bump commits never touch main, so
-                        // GitHub Actions CI is never re-triggered by them.
-                        // --force is required: main HEAD + bump is not a
-                        // fast-forward of the previous deploy/local tip.
+                        # Push to the automation-only environment branch, NOT main.
+                        # deploy/local is a disposable "pointer" branch: it is
+                        # force-updated on every build to (main HEAD + bump commit).
+                        # ArgoCD's local app (targetRevision: deploy/local) watches
+                        # only this branch — bump commits never touch main, so
+                        # GitHub Actions CI is never re-triggered by them.
+                        # --force is required: main HEAD + bump is not a
+                        # fast-forward of the previous deploy/local tip.
                         git push --force "\${AUTHENTICATED_URL}" HEAD:deploy/local
                     """
                 }
