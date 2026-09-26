@@ -21,7 +21,7 @@ backend:
     # local-k8s/kind-config.yaml (-> http://kind-registry:5000). Both paths
     # land on the same registry container.
     repository: localhost:5000/pde/backend
-    tag: dev
+    tag: 4-b48a92a
     # Always, not IfNotPresent/Never: the tag is reused/mutated by CI runs
     # during practice, and kind's containerd should re-pull from the local
     # registry rather than caching a stale image with the same tag.
@@ -58,7 +58,7 @@ frontend:
   replicaCount: 1
   image:
     repository: localhost:5000/pde/frontend
-    tag: dev
+    tag: 4-b48a92a
     pullPolicy: Always
   autoscaling:
     enabled: false
