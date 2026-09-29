@@ -28,7 +28,12 @@ const BLANK_FORM = {
   hadd_name: "Pune M.N.Pa. / पुणे म.न.पा.",
   taluka: "Haveli / हवेली",
   zp: "",
-  attribute_type_1: "Survey Number",
+  // NOTE: no attribute type is pre-selected here. Pre-filling
+  // `attribute_type_1` (it used to default to "Survey Number") permanently
+  // occupied slot 1, so only ONE further checkbox could ever be selected and
+  // an un-ticked/edited record came back showing that phantom "Survey Number"
+  // instead of what was actually saved.
+  attribute_type_1: "",
   attribute_value_1: "",
   attribute_type_2: "",
   attribute_value_2: "",
@@ -104,6 +109,48 @@ export default function PropertyDetails() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  // "Select Attribute Type" is a checkbox multi-select capped at 2 (per the
+  // on-screen note). The two slots (attribute_type_1/2 and their matching
+  // attribute_value_1/2) are the single source of truth, so the toggle MUST
+  // read the latest state through the functional setForm updater. The previous
+  // handler read `form` straight off the render closure, which made the 2nd
+  // click a silent no-op whenever slot 2 was already taken, so checking two
+  // boxes could never register two attributes.
+  function toggleAttributeType(type) {
+    setForm((prev) => {
+      const slots = [
+        { type: prev.attribute_type_1, value: prev.attribute_value_1 },
+        { type: prev.attribute_type_2, value: prev.attribute_value_2 },
+      ];
+      const isSelected = slots.some((s) => s.type === type);
+
+      let next;
+      if (isSelected) {
+        // Un-check: drop the slot, then shift the remaining one up so a
+        // type is never paired with the other slot's value.
+        next = slots.filter((s) => s.type !== type);
+      } else {
+        // Manual caps the selection at 2 attributes.
+        if (slots.filter((s) => s.type).length >= 2) return prev;
+        const freeSlot = slots.findIndex((s) => !s.type);
+        if (freeSlot === -1) return prev;
+        next = [...slots];
+        next[freeSlot] = { type, value: "" };
+      }
+
+      while (next.length < 2) next.push({ type: "", value: "" });
+      return {
+        ...prev,
+        attribute_type_1: next[0].type,
+        attribute_value_1: next[0].value,
+        attribute_type_2: next[1].type,
+        attribute_value_2: next[1].value,
+      };
+    });
+  }
+
+  const selectedAttributeCount = [form.attribute_type_1, form.attribute_type_2].filter(Boolean).length;
+
   // Auto-translate paired English → Marathi fields (PropertyDetails config).
   useEnMrAutoTranslate(form, update, TRANSLATION_PAIRS.PropertyDetails);
 
@@ -142,7 +189,7 @@ export default function PropertyDetails() {
       hadd_name: prop.hadd_name || "",
       taluka: prop.taluka || "",
       zp: prop.zp || "",
-      attribute_type_1: attr1.type || "Survey Number",
+      attribute_type_1: attr1.type || "",
       attribute_value_1: attr1.value || "",
       attribute_type_2: attr2.type || "",
       attribute_value_2: attr2.value || "",
@@ -204,13 +251,16 @@ export default function PropertyDetails() {
       setError(t(validationError));
       return;
     }
-    const attributes = [];
-    if (form.attribute_type_1 && form.attribute_value_1) {
-      attributes.push({ type: form.attribute_type_1, value: form.attribute_value_1 });
-    }
-    if (form.attribute_type_2 && form.attribute_value_2) {
-      attributes.push({ type: form.attribute_type_2, value: form.attribute_value_2 });
-    }
+    // Build the attribute list from the SELECTED types. Every selected type
+    // must carry a value (enforced by validatePropertyForm above), so a
+    // checked box can never be dropped on the way to the API — that silent
+    // drop is why a 2-attribute selection came back as 1 after Edit.
+    const attributes = [
+      { type: form.attribute_type_1, value: form.attribute_value_1 },
+      { type: form.attribute_type_2, value: form.attribute_value_2 },
+    ]
+      .filter((a) => a.type && String(a.value ?? "").trim() !== "")
+      .map((a) => ({ type: a.type, value: String(a.value).trim() }));
 
     setSaving(true);
     const payload = {
@@ -432,30 +482,23 @@ export default function PropertyDetails() {
             <div className="pde-panel-row">
               <label>Select Attribute Type</label>
               <div className="pde-attr-list">
-                {ATTRIBUTE_TYPES.map((a) => (
-                  <label key={a}>
-                    <input
-                      type="checkbox"
-                      checked={form.attribute_type_1 === a || form.attribute_type_2 === a}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          if (!form.attribute_type_1) {
-                            update("attribute_type_1", a);
-                          } else if (!form.attribute_type_2 && form.attribute_type_1 !== a) {
-                            update("attribute_type_2", a);
-                          }
-                        } else {
-                          if (form.attribute_type_1 === a) {
-                            setForm((prev) => ({ ...prev, attribute_type_1: prev.attribute_type_2, attribute_value_1: prev.attribute_value_2, attribute_type_2: "", attribute_value_2: "" }));
-                          } else if (form.attribute_type_2 === a) {
-                            setForm((prev) => ({ ...prev, attribute_type_2: "", attribute_value_2: "" }));
-                          }
-                        }
-                      }}
-                    />
-                    {" "}{a}
-                  </label>
-                ))}
+                {ATTRIBUTE_TYPES.map((a) => {
+                  const isSelected = form.attribute_type_1 === a || form.attribute_type_2 === a;
+                  // Once 2 are picked the remaining boxes are disabled so the
+                  // cap is visible instead of the click silently doing nothing.
+                  const isDisabled = !isSelected && selectedAttributeCount >= 2;
+                  return (
+                    <label key={a} className={isDisabled ? "pde-attr-disabled" : undefined}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={isDisabled}
+                        onChange={() => toggleAttributeType(a)}
+                      />
+                      {" "}{a}
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
@@ -569,7 +612,8 @@ export default function PropertyDetails() {
               <input
                 type="text"
                 className="pde-input"
-                placeholder=""
+                placeholder={form.attribute_type_1 || "--Select Attribute Type--"}
+                disabled={!form.attribute_type_1}
                 value={form.attribute_value_1}
                 onChange={(e) => update("attribute_value_1", e.target.value)}
               />
@@ -591,7 +635,8 @@ export default function PropertyDetails() {
               <input
                 type="text"
                 className="pde-input"
-                placeholder=""
+                placeholder={form.attribute_type_2 || "--Select Attribute Type--"}
+                disabled={!form.attribute_type_2}
                 value={form.attribute_value_2}
                 onChange={(e) => update("attribute_value_2", e.target.value)}
               />

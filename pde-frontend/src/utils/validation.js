@@ -154,6 +154,15 @@ export function validatePropertyForm(form) {
     validateRequired(form.district, "validation.districtRequired"),
     validateRequired(form.village_name, "validation.villageRequired"),
     form.area !== "" && form.area != null && Number(form.area) <= 0 ? "validation.areaInvalid" : null,
+    // A ticked Attribute Type must carry its number. Without this the save
+    // path silently discarded the blank one, so a 2-checkbox selection was
+    // persisted (and later redisplayed) as a single attribute.
+    form.attribute_type_1 && String(form.attribute_value_1 ?? "").trim() === ""
+      ? "validation.attributeValueRequired"
+      : null,
+    form.attribute_type_2 && String(form.attribute_value_2 ?? "").trim() === ""
+      ? "validation.attributeValueRequired"
+      : null,
   );
 }
 

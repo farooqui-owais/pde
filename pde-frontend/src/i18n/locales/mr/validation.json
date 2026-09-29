@@ -23,6 +23,7 @@
   "districtRequired": "जिल्हा आवश्यक आहे.",
   "villageRequired": "गावाचे नाव आवश्यक आहे.",
   "areaInvalid": "क्षेत्रफळ शून्यापेक्षा जास्त असावे.",
+  "attributeValueRequired": "निवडलेल्या प्रत्येक अॅट्रिब्यूट प्रकारासाठी मूल्य भरा.",
   "partyTypeRequired": "पक्ष प्रकार आवश्यक आहे.",
   "entityTypeRequired": "संस्था प्रकार आवश्यक आहे.",
   "countryRequired": "देश आवश्यक आहे.",

@@ -107,6 +107,17 @@
   background: #f0fff4;
 }
 
+/* Reached the manual's cap of 2 attributes: remaining options are shown greyed
+   out (and non-interactive) so the limit is obvious rather than a silent no-op. */
+.pde-attr-list label.pde-attr-disabled {
+  color: #9aa5b1;
+  cursor: not-allowed;
+}
+
+.pde-attr-list label.pde-attr-disabled:hover {
+  background: transparent;
+}
+
 /* Warning text for max attributes */
 .pde-warning-text {
   color: #c53030;

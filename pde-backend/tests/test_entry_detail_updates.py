@@ -80,6 +80,47 @@ def test_property_update_includes_boundaries_and_attributes(client, auth_headers
     assert row["electricity_board"] == "Tata Power"
 
 
+def test_property_two_attributes_roundtrip(client, auth_headers):
+    """Selecting 2 attribute types (checkbox multi-select) must survive
+    POST -> GET (the read-back the Edit button uses) with BOTH entries."""
+    entry_id = _make_entry(client, auth_headers)
+
+    create_payload = {
+        "district": "Pune",
+        "village_name": "Baner",
+        "urban_rural": "Urban",
+        "hadd_type": "Municipal Corporation",
+        "hadd_name": "PMC",
+        "taluka": "Haveli",
+        "attributes": [
+            {"type": "Survey Number", "value": "123/1"},
+            {"type": "C.T.S. Number", "value": "456/2"},
+        ],
+        "area": 850.0,
+        "area_unit": "Square Foot",
+        "property_type": "Flat",
+    }
+    res = client.post(f"/api/documents/{entry_id}/properties", json=create_payload, headers=auth_headers)
+    assert res.status_code == 201, res.text
+    prop_id = res.json()["id"]
+    assert res.json()["attributes"] == create_payload["attributes"]
+
+    res = client.get(f"/api/documents/{entry_id}/properties", headers=auth_headers)
+    assert res.status_code == 200
+    row = next(p for p in res.json() if p["id"] == prop_id)
+    assert len(row["attributes"]) == 2, row["attributes"]
+    assert row["attributes"] == create_payload["attributes"]
+
+    # Editing an existing record and keeping both must also round-trip.
+    res = client.put(
+        f"/api/documents/{entry_id}/properties/{prop_id}",
+        json=create_payload,
+        headers=auth_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["attributes"] == create_payload["attributes"]
+
+
 def test_party_update_includes_salutation_occupation_gender_dob(client, auth_headers):
     entry_id = _make_entry(client, auth_headers)
 
