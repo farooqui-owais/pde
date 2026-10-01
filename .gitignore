@@ -1,14 +1,18 @@
 # ================================================================
-# Root .gitignore — used if this becomes a single monorepo repo.
-# The frontend also has its own .gitignore (pde-frontend/.gitignore)
-# because it is pushed to GitHub as a standalone repo.
+# .gitignore — `prod` branch (AWS Terraform + frontend + backend).
 #
-# UPDATED: this repo now actively uses Docker/Kubernetes/Helm/Jenkins/
-# ArgoCD (see local-k8s/) alongside the existing on-premise and
-# Render/Netlify/EKS paths — multiple deployment strategies live side
-# by side here on purpose. The old "Docker/K8s not needed for plain
-# deploy" assumption no longer holds, so those files are tracked now.
+# This branch holds only the files the production deployment needs:
+#   terraform/        AWS infra (prod environment + modules)
+#   pde-backend/      FastAPI app served by gunicorn on the EC2 instance
+#   pde-frontend/     React/Vite app built with `npm ci && npm run build`
+# Dev/local-only files (tests, docker-compose, Helm/K8s, CI workflows,
+# docs) are intentionally absent from this branch.
 # ================================================================
+
+# ---- Secrets: never commit real env files, keep the template ----
+.env
+.env.*
+!.env.example
 
 # ---- Python (backend) ----
 __pycache__/
@@ -25,93 +29,53 @@ env/
 .coverage.*
 htmlcov/
 
-# --- environment files: NEVER commit real secrets, keep templates ---
-.env
-.env.*
-!.env.example
-.envrc
-.flaskenv
-
 # ---- Node / frontend ----
 node_modules/
 dist/
 dist-ssr/
+.vite/
+coverage/
+.eslintcache
+.parcel-cache/
 *.log
 logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-coverage/
-.vite/
-.eslintcache
-.parcel-cache/
 
-# ---- Deploy / build artifacts ----
-*.tar.gz
-*.zip
-
-# ---- Helm ----
-# Chart.lock IS tracked on purpose (like package-lock.json) — pins
-# subchart/dependency versions. Only the fetched dependency archives
-# and extracted subchart folders are junk.
-helm/**/charts/
-*.tgz
-
-# ---- Editor / OS ----
-.vscode/*
-!.vscode/extensions.json
-.idea/
-.DS_Store
-Thumbs.db
-*.sw?
-
-# ---- Terraform / CloudFormation local state (never commit real state) ----
+# ---- Terraform local state (never commit real state) ----
 .terraform/
 *.tfstate
 *.tfstate.*
+crash.log
+override.tf
+override.tf.json
 
-# ---- CloudFormation parameter files: real secrets, keep local ----
-# Copy aws/parameters/dev.json.example -> aws/parameters/dev.json and fill in.
-aws/parameters/dev.json
-
-# ---- Local Kubernetes/CI artifacts (kind + Jenkins) ----
-# kubeconfigs occasionally get exported to a file for debugging — never
-# commit one (it can contain cluster auth data on some setups).
-kubeconfig*.yaml
-kubeconfig*.yml
-*.kubeconfig
-# `helm template`/`helm get manifest` output people sometimes redirect
-# here while debugging a chart — not a source file, don't track it.
-/local-k8s/rendered/
-
-# Local uploads folder (user-uploaded files, never commit)
+# ---- Runtime / uploads ----
 pde-backend/uploads/
 
-# Local DB override, never needed outside the author's machine
-pde-backend/app/database.local.py
-
-# ---- Root-level docs/artifacts kept local only (not pushed to GitHub) ----
-# These are intentionally NOT tracked; they exist on disk locally.
+# ---- Local-only files (exist on the author's machine, never pushed) ----
+# These live alongside the branch in the shared working tree but are not
+# part of the production branch.
 /DEPLOYMENT.md
 /SECURITY.md
 /monorepo.md
 /kubernetes.md
+/cmd-k8s.md
 /REUSABLE_PROJECT_PROMPT.md
+/GAP_ANALYSIS_AND_IMPLEMENTATION.md
 /iSarita_PDE_Manual_Extract_for_Antigravity.md
 /iSaritaPublicDataEntry_UserManual.pdf
-# Working notes from the local-k8s CI/CD build-out — confirm you actually
-# want these local-only rather than committed; GAP_ANALYSIS in particular
-# reads like real documentation someone else on the team might want.
-/GAP_ANALYSIS_AND_IMPLEMENTATION.md
-/cmd-k8s.md
+*.zip
+/pde-documentation/
+.netlify/
+# Real CloudFormation parameters with secrets (aws/ itself is not in prod)
+aws/parameters/dev.json
 
-pde-antigravity-documentation
-
-# Local Netlify folder (the .netlify CLI cache — always local/machine-specific)
-.netlify
-
-# ---- SonarQube (local, optional — see sonar/) ----
-# Scratch directory written by the SonarScanner during an analysis. Never a
-# source artifact; deleting it is always safe.
-.scannerwork/
+# ---- Editor / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.sw?

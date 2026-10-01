@@ -1,3 +1,0 @@
-# Local build workers share a 1GiB BuildKit container; no parallel vertices.
-[worker.oci]
-  max-parallelism = 1
