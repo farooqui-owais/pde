@@ -57,6 +57,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
     id     = "ExpireOldVersions"
     status = "Enabled"
 
+    # AWS provider requires each rule to specify exactly one of `filter` or
+    # `prefix`; an empty filter matches every object in the bucket.
+    filter {}
+
     noncurrent_version_expiration {
       noncurrent_days = var.noncurrent_version_expiration_days
     }

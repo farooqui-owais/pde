@@ -67,7 +67,7 @@ variable "repo_url" {
 variable "repo_branch" {
   description = "Production deploys a dedicated release tag/branch, not main."
   type        = string
-  default     = "main"
+  default     = "prod"
 }
 
 variable "app_dir" {
@@ -97,9 +97,9 @@ variable "db_user" {
 }
 
 variable "backup_retention_period" {
-  description = "Automated backup retention in days (prod: keep 7)."
+  description = "Automated backup retention in days. Free tier rejects anything above 1 day (FreeTierRestrictionError); raise only after upgrading the AWS account plan."
   type        = number
-  default     = 7
+  default     = 1
 }
 
 variable "deletion_protection" {

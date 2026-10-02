@@ -12,7 +12,7 @@ frontend and the infrastructure code. Developer/local-only files are kept on
 prod/
 â”œâ”€â”€ terraform/
 â”‚   â”œâ”€â”€ environments/prod/   prod stack: VPC 10.20.0.0/16, RDS deletion
-â”‚   â”‚                         protection, 7-day backups, 30-day logs
+â”‚   â”‚                         protection, 1-day free-tier backups, 30-day logs
 â”‚   â”œâ”€â”€ modules/              network, compute, database, storage, cdn, monitoring
 â”‚   â””â”€â”€ bootstrap/            one-time S3/DynamoDB remote-state setup
 â”œâ”€â”€ pde-backend/              FastAPI + SQLAlchemy (requirements.txt + app/)

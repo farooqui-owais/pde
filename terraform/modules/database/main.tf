@@ -36,9 +36,13 @@ resource "aws_db_subnet_group" "this" {
 }
 
 resource "aws_db_instance" "this" {
-  identifier             = "${var.environment_name}-postgres"
-  engine                 = "postgres"
-  engine_version         = "16.8"
+  identifier = "${var.environment_name}-postgres"
+  engine     = "postgres"
+  # 16.8 is no longer offered in ap-south-1 (InvalidParameterCombination:
+  # "Cannot find version 16.8"). 16.15 is the latest available minor — verify/
+  # bump with: aws rds describe-db-engine-versions --engine postgres
+  #            --engine-version 16 --region ap-south-1
+  engine_version         = "16.15"
   instance_class         = var.db_instance_class
   allocated_storage      = var.db_allocated_storage
   max_allocated_storage  = var.db_max_allocated_storage

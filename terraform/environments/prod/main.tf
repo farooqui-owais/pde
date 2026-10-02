@@ -1,7 +1,8 @@
 # =============================================================================
 # main.tf - PDE production: wires all modules together (free tier).
-# Production differences vs preprod: RDS deletion protection, 7-day backups,
-# optional 30-day logs, dedicated 10.20.0.0/16 address space.
+# Production differences vs preprod: RDS deletion protection, 30-day logs,
+# dedicated 10.20.0.0/16 address space. Backup retention stays at 1 day:
+# free-tier accounts reject longer periods (FreeTierRestrictionError).
 # =============================================================================
 module "network" {
   source = "../../modules/network"

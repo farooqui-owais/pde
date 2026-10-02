@@ -35,4 +35,4 @@ instance_type           = "t3.micro"
 db_instance_class       = "db.t3.micro"
 db_allocated_storage    = 20
 deletion_protection     = true
-backup_retention_period = 7
+backup_retention_period = 1 # free-tier max (7 triggers FreeTierRestrictionError)

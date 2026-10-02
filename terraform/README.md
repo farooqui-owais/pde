@@ -18,7 +18,7 @@ terraform/
 ├── environments/
 │   ├── preprod/      pde-preprod, VPC 10.10.0.0/16, permissive defaults
 │   ├── prod/         pde-prod,   VPC 10.20.0.0/16, hardened defaults
-│   │                 (RDS deletion protection, 7-day backups, 30-day logs)
+│   │                 (RDS deletion protection, 1-day free-tier backups, 30-day logs)
 │   └── (each has its own state, variables and tfvars)
 ├── bootstrap/        One-time S3/DynamoDB state backend setup (README)
 └── .gitignore        Keeps *.tfstate and *.auto.tfvars out of git
